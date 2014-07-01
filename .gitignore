@@ -8,6 +8,9 @@ __pycache__/
 # hf5 databases
 *.h5
 
+# keep passwords hidden
+KIPs_Access.txt
+
 # Distribution / packaging
 .Python
 env/
