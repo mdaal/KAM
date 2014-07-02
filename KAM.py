@@ -5,6 +5,7 @@ import scipy.io #for loading .mat file
 import os
 import numpy as np
 
+
 import tables
 import matplotlib.pyplot as plt
 import datetime
@@ -12,6 +13,9 @@ from scipy.optimize import minimize, leastsq
 
 import numpy.ma as ma
 import sys # for status percentage
+
+import platform
+mysys = platform.system()
 
 import warnings #trying to get a warning every time rather than just the first time.
 warnings.filterwarnings('always')
@@ -149,12 +153,16 @@ class thermometry:
 
 		fig1 = plt.figure( facecolor = 'w',figsize = (10,10))
 		ax = fig1.add_subplot(1,1,1)		
-
+		try:
+			line = ax.plot(temp_data[:,0], temp_data[:,2],'g:', linewidth = 3,label = 'Data2')
+		except:
+			pass
 		line = ax.plot(temp_data[:,0], temp_data[:,1],'g', linewidth = 3,label = 'Data')
 		line2 = ax.plot(temp_data[:,0], ga, 'y', linewidth = 3, label = 'Gaussian Conv') # Gaussian Convolution
 		line3 = ax.plot(temp_data[:,0], fl, 'c', linewidth = 3, label = 'Butterworth') # butterworth 
 		line4 = ax.plot(temp_data[:,0], sp(temp_data[:,0]), 'k', linewidth = 3, label = 'Spline') # bspline
 		line5 = ax.plot(temp_data[:,0], wi, 'r', linewidth = 3, label = 'Weiner') # weiner
+
 		ax.grid(b=True, which='major', color='b', linestyle='-')
 		ax.grid(b=True, which='minor', color='b', linestyle='--')
 		ax.set_title('Heater Voltages = {}'.format(Voltages), fontsize=12)
@@ -1495,10 +1503,14 @@ class sweep:
 		#z_theta  = ma.compressed(z_theta)
 		
 
-	
+		if mysys.startswith('Windows'):
+			dt = np.float64
+		else:	
+			dt = np.float128
+
 		def hess(x, z_theta,f): #to avoid overflow try to re write hessian so that all numbers are of order 1
 			theta,fr,Q = x	
-			H = np.zeros((3,3), dtype = np.float128)
+			H = np.zeros((3,3), dtype = dt)
 			ff = (1-(f/fr))
 			denom = (1+4.0*np.square(ff*Q))
 			numer = (theta+z_theta-2.0*np.arctan(2.0*ff*Q))
@@ -1515,7 +1527,7 @@ class sweep:
 
 		def jac(x,z_theta,f):
 			theta,fr,Q = x
-			J = np.zeros((3,),dtype = np.float128)    #np.zeros_like(x)
+			J = np.zeros((3,),dtype = dt)    #np.zeros_like(x)
 			ff = (1-(f/fr))
 			denom = (1+4.0*np.square(ff*Q))
 			numer = (theta+z_theta-2.0*np.arctan(2.0*ff*Q))	
@@ -1721,9 +1733,12 @@ class sweep:
 												fr = self.loop.fr)
 
 			if Compute_Preadout == True:
-				try:
+				if self.loop.fr != None:
 					self._define_sweep_array(index, Preadout_dB = self.Sweep_Array['Pinput_dB'][index] + Preadout(self.loop.fr))
-				except: 
+				elif np.abs(self.loop.freq[-1]-self.loop.freq[0]) > 1e9:
+					print('Sweep bandwidth is {0} Hz. Sweep looks more like a survey. Preadout_dB is meaningless for a survey. Aborting Preadout computation... '.format(np.abs(self.loop.freq[-1]-self.loop.freq[0])))
+					
+				else:
 					print('No resonance frquency (fr) on record for selected resonance. Estimating fr using sweep minimum.')
 					fr = np.extract(np.abs(self.loop.z).min() == np.abs(self.loop.z),self.loop.freq)[0]
 					self._define_sweep_array(index, Preadout_dB = self.Sweep_Array['Pinput_dB'][index] + fr)
