@@ -8,6 +8,9 @@ __pycache__/
 # hf5 databases
 *.h5
 
+# dont track ipynd checkpoints
+.ipynb_checkpoints/
+
 # keep passwords hidden
 KIPs_Access.txt
 
