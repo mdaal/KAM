@@ -13,8 +13,8 @@ from scipy.optimize import minimize, leastsq
 import numpy.ma as ma
 import sys # for status percentage
 
-#import warnings #trying to get a warning every time rather than just the first time.
-#warnings.filterwarnings('always')
+import warnings #trying to get a warning every time rather than just the first time.
+warnings.filterwarnings('always')
 
 database_location = 'Data' + os.sep + 'My_Data_Library.h5'
 
@@ -607,7 +607,10 @@ class sweep:
 			print('Speficied h5 database does not exist. Creating new one.')
 			pos = filename.find('/')
 			if pos >= 0:
-				os.makedirs(filename[0:pos+1])
+				try:
+					os.makedirs(filename[0:pos+1])
+				except OSError:
+					print('{0} exists...'.format(filename[0:pos+1]))
 			wmode = 'w'
 		else:
 			print('Speficied h5 database exists and will be updated.')
