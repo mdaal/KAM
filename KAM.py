@@ -1506,7 +1506,7 @@ class sweep:
 			H[0,1] = ((-8.0*f*Q)/(np.square(fr)*denom)).sum()
 			H[0,2] = ((8.0*ff)/denom).sum()
 			H[1,0] = H[0,1] #((8.0*f*Q)/(np.square(fr)*denom)).sum()
-			H[1,1] = (((32.0*np.square(f*Q))/(np.power(fr,4)*np.square(denom)))  +   ((64.0*np.square(f)*ff*np.power(Q,3)*numer)/(np.power(fr,4)*np.square(denom)))   +  ((16.0*f*Q*numer)/(np.power(fr,3)*denom))).sum()
+			H[1,1] = ((32.0*np.square(f*Q/(np.square(fr)*denom)))  +   (64.0*np.square(f/(np.square(fr)*denom))*ff*np.power(Q,3)*numer)   +  ((16.0*f*Q/np.power(fr,3))*(numer/denom))).sum()
 			H[1,2] = (((32.0*f*Q*ff)/np.square(fr*denom))  +  ((64.0*f*np.square(ff*Q)*numer)/(np.square(fr*denom)))  - ((8.0*f*numer)/(np.square(fr)*denom))).sum()
 			H[2,0] = H[0,2] #((8.0*ff)/denom).sum()
 			H[2,1] = H[1,2] #(((32.0*f*ff*Q)/np.square(fr*denom))  +  ((64.0*f*np.square(ff*Q)*numer)/(np.square(fr*denom)))  -  ((8.0*f*numer)/(np.square(fr)*denom))).sum()
