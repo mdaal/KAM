@@ -1373,6 +1373,10 @@ class sweep:
 
 	def phase_fit(self, Fit_Method = 'Multiple', Verbose = True, Show_Plot = True):
 		from scipy.stats import chisquare
+		
+		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
+		   Fit_Method={Fit_Method}
+		   
 		def angle(z, deg = 0):
 			''' If z is a masked array. angle(z) returns the angle of the elements of z
 			within the branch [0,360] instead of [-180, 180], which is the branch used
@@ -1556,19 +1560,23 @@ class sweep:
 		fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta,f), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
 
 		fit = {}
-
-		if Fit_Method == 'Multiple':
-			for method in fit_func.keys():
-				fit[method] = fit_func[method]()
-		elif Fit_Method in fit_func.keys():
-			fit[Fit_Method] = fit_func[Fit_Method]()
-		else:
-			print("Unrecognized fit method. Aborting fit. \n\t Must choose one of {0} or 'Multiple'".format(fit_func.keys()))
-			return
 		
-
-
-
+		if isinstance(Fit_Method,set):      #All string inputs for Fit_Method were changed to sets at the begining of phase_fit
+		   if Fit_Method == {'Multiple'}:
+		      for method in fit_func.keys():
+		         fit[method] = fit_func[method]()
+		   else:
+		      for method in Fit_Method:
+		         if method not in fit_func.keys():
+		            print("Unrecognized fit method. Aborting fit. \n\t Must choose one of {0} or 'Multiple'".format(fit_func.keys()))
+		            return
+		         else:   
+		            fit[method] = fit_func[method]()
+		else:
+		   print("Unrecognized fit method data type. Aborting fit. \n\t Please specify using a string or a set of strings from one of {0} or 'Multiple'".format(fit_func.keys()))
+		   return	         	   
+		               				
+		
 		#Does not work if the objective function is re-arranged as in the following
 		# print('Nelder-Mead 2 ################# ')
 		# def obj(x,z_theta,f):
