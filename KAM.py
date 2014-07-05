@@ -113,7 +113,7 @@ class metadata:
 class thermometry:
 	def __init__(self):
 		pass
-	def load_MonitoringVI_file(self, filename):
+	def load_MonitoringVI_file(self, filename, temp_list = None):
 		import io
 		from scipy.signal import gaussian,wiener, filtfilt, butter,  freqz
 		from scipy.ndimage import filters
@@ -133,13 +133,23 @@ class thermometry:
 			print('Unable to find or read Make_ScanData.m for list of heater voltages')
 			Voltages = 'Unknown'
 
+ 		with io.open(filename,mode='r') as f:
+ 			temp_data_header = f.readline()
+ 			pos  = max(temp_data_header.find('PM'),temp_data_header.find('AM')) 
+ 			if pos >0:
+ 				therm_list = [t for t in temp_data_header[pos+2:].strip().split('\t') if (t != 'None') | (t != '')]
+ 			else:
+ 				therm_list = [None]
+ 			
 
 		temp_data = np.loadtxt(filename, dtype=np.float, comments='#', delimiter=None, converters=None, skiprows=3, usecols=None, unpack=False, ndmin=0)
 		
+		# Gaussian Filter
 		num_pts_in_gaussian_window = 20
 		b = gaussian(num_pts_in_gaussian_window, 10)
 		ga = filters.convolve1d(temp_data[:,1], b/b.sum())
 
+		# buterworth Filter
 		npts = temp_data[:,1].size
 		end = temp_data[-1,0]
 		dt = end/float(npts)
@@ -147,24 +157,34 @@ class thermometry:
 		b, a = butter(4, .1)#1.5/nyf)
 		fl = filtfilt(b, a, temp_data[:,1])
     	
+    	#Spline Fit
 		sp = UnivariateSpline(temp_data[:,0], temp_data[:,1])
 
+		#weiner filter
 		wi = wiener(temp_data[:,1], mysize=40, noise=10)
 
 		fig1 = plt.figure( facecolor = 'w',figsize = (10,10))
 		ax = fig1.add_subplot(1,1,1)		
-		try:
-			line = ax.plot(temp_data[:,0], temp_data[:,2],'g:', linewidth = 3,label = 'Data2')
-		except:
-			pass
-		line = ax.plot(temp_data[:,0], temp_data[:,1],'g', linewidth = 3,label = 'Data')
+		
+		if isinstance(temp_list, list):
+			for temp_tuple in temp_list:
+				hline = ax.axhline(y = temp_tuple[1],linewidth=1, color='g', alpha = 0.3 ,linestyle = ':',   label = None)
+
+
+		num_col  = temp_data.shape[1]
+		start_col = 1
+		color_incr = 1.0/(num_col-start_col)
+		for therm_num in xrange(start_col, num_col): # plot all thermometer data present
+			line = ax.plot(temp_data[:,0], temp_data[:,therm_num],color=(0,color_incr*therm_num,0), alpha = 0.4 if therm_num != 1 else 1, linewidth = 3,label = therm_list.pop(0) if therm_list[0] != None else 'Therm{0}'.format(therm_num))
+
+		#plot filter outputs for THE FIRST thermometer only 
 		line2 = ax.plot(temp_data[:,0], ga, 'y', linewidth = 3, label = 'Gaussian Conv') # Gaussian Convolution
 		line3 = ax.plot(temp_data[:,0], fl, 'c', linewidth = 3, label = 'Butterworth') # butterworth 
 		line4 = ax.plot(temp_data[:,0], sp(temp_data[:,0]), 'k', linewidth = 3, label = 'Spline') # bspline
 		line5 = ax.plot(temp_data[:,0], wi, 'r', linewidth = 3, label = 'Weiner') # weiner
 
-		ax.grid(b=True, which='major', color='b', linestyle='-')
-		ax.grid(b=True, which='minor', color='b', linestyle='--')
+		ax.grid(b=True, which='major', color='b', alpha = 0.2, linestyle='-')
+		ax.grid(b=True, which='minor', color='b', alpha = 0.2,linestyle='--')
 		ax.set_title('Heater Voltages = {}'.format(Voltages), fontsize=12)
 		ax.set_ylabel('Temperature [Kelvin]')
 		ax.set_xlabel('Seconds')
@@ -365,8 +385,8 @@ class sweep:
 			("Frequencies"    	, np.float32,(fsteps,)), # in Hz
 			("Q"				, np.float32),
 			("Qc"				, np.float32),
-			("fr"				, np.float32), # in Hz
-
+			("Fr"				, np.float32), # in Hz
+			("Is_Valid"			, np.bool),
 			])
 
 	def _define_sweep_array(self,index,**field_names):
@@ -419,8 +439,8 @@ class sweep:
 					self.metadata.__dict__[t[1]] = self._extract_type(ScanData[t[0]], return_type = t[2],field = t[3] if len(t) > 3 else None)
 			except: 
 				#the case that the field does not exist or that its in an unexpected format
-				print('Field named {0}{1} is not found. Setting value to None'.format(t[0], (':'+t[3]) if len(t) > 3 else ''))
-
+				#print('Field named {0}{1} is not found. Setting value to None'.format(t[0], (':'+t[3]) if len(t) > 3 else '')) # this usesScandata nomenclature
+				print('Field named {0} is not found. Setting value to None'.format(t[1])) # this uses self.metadata nomenclature
 		try:
 			self.metadata.Powers                = self.metadata.Powers.squeeze() #for case there are multiples powers
 		except:
@@ -430,11 +450,12 @@ class sweep:
 		self.metadata.Heater_Voltage = self.metadata.Heater_Voltage.reshape((self.metadata.Heater_Voltage.shape[1],))
 		self.metadata.Heater_Voltage = self.metadata.Heater_Voltage[0:-1]
 
-		# Determine lenght of S21 and Frequencies. Note in the next line how self.Freq_Range is structured. 
+		
+		print('Loading Run: {0}'.format(self.metadata.Run))
 		print('There are {0} heater voltage(s), {1} input power(s), and {2} frequecy span(s)'.format(self.metadata.Heater_Voltage.shape[0],self.metadata.Powers.shape[0], self.metadata.Freq_Range.shape[0]))
 		heater_voltage_num = 0; power_sweep_num = 0; fsteps = 0;
 
-		# determin fsteps, the length of the freq/S21 array
+		# determin fsteps = length of the freq/S21 array
 		if self.metadata.Heater_Voltage.shape[0] == 1:
 			fsteps = self.metadata.Freq_Range[heater_voltage_num][1]['PowerSweep'][0][0][power_sweep_num][2].squeeze()[()].size # non temp sweep, single freq_range, powersweep
 		else:					
@@ -486,7 +507,8 @@ class sweep:
 													Heater_Voltage = self.metadata.Heater_Voltage[heater_voltage_num],
 													Pinput_dB = sweep[0].squeeze()[()],
 													S21 = sweep[1].squeeze()[()],
-													Frequencies =  sweep[2].squeeze()[()])
+													Frequencies =  sweep[2].squeeze()[()],
+													Is_Valid = True)
 						i = i + 1
 
 
@@ -1368,7 +1390,7 @@ class sweep:
 			j = np.complex(0,1); zc = self.loop.a + j*self.loop.b;  r = self.loop.r
 			line = ax.plot(zc.real + r*np.cos(t),zc.imag + r*np.sin(t),'y-', label = 'Circle Fit')
 			line = ax.plot([zc.real],[zc.imag],'yx', markersize = 10, markeredgewidth = 4, label = 'Center')
-
+			ax.set_aspect('equal')
 			plt.show()	
 
 	def phase_fit(self, Fit_Method = 'Multiple', Verbose = True, Show_Plot = True):
@@ -1704,14 +1726,26 @@ class sweep:
 
 		if Add_Temperatures == True:
 			Temperature_Calibration = self.metadata.Temperature_Calibration
-			if type(Temperature_Calibration) == list: 
+			if (self.Sweep_Array.size == 1) & (self.metadata.Fridge_Base_Temp != None) & (self.Sweep_Array['Heater_Voltage'][0] == 0):
+				#This is usually the case of a survey: done at base temp with no Heater power
+				self.Sweep_Array['Temperature'][0] = self.metadata.Fridge_Base_Temp
+				print('Setting Tempreature to metadata.Fridge_Base_Temp value.')
+				Add_Temperatures = False
+
+			elif type(Temperature_Calibration) == list: 
 				Temperature_Calibration = np.array(Temperature_Calibration)
 				# Temperature_Calibration[:,0] is heater voltages
 				# Temperature_Calibration[:,1] is temperatures voltages
-				tol =  0.0005
+				
+				# becasue ScanData heater voltages are read in as numbers like 0.24999999 and 0.2500001 instread of 0.25
+				# as included in the Temperature_Calibration list/array, use this 'tol' to associate closest ScanData 
+				# heater voltage to voltage in Temperature_Calibration list/array.
+				tol =  0.0005 
+			
 			else:
 				print('Temperature_Calibration metadata is not found or not of the correct type. Unable to add temperatures.')
 				Add_Temperatures = False
+
 
 			
 		num_records = self.Sweep_Array.size
@@ -1738,7 +1772,7 @@ class sweep:
 
 				self._define_sweep_array(index, Q = self.loop.Q,
 												Qc = self.loop.Qc,
-												fr = self.loop.fr)
+												Fr = self.loop.fr)
 
 			if Compute_Preadout == True:
 				if self.loop.fr != None:
@@ -1759,6 +1793,7 @@ class sweep:
 					print('Unable to match unique temperature to heater voltage value for Sweep_Array[{1}]. {} matches found.'.format(index,condition.sum() ))
 
 			# Clear out loop
+			print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
 			del(self.loop)
 			self.loop = loop() 
 
@@ -1771,8 +1806,9 @@ class sweep:
 		The loss evaluates to units of dB.
 
 		Two used this function load transmission for complete cable loop only (not amps or attens).
-		Then call this function on that transmission data. This funciton creats the tuple (a,b,c,run) in 
-		metadata, where run is the name of the calibration run.
+		Then call this function on that transmission data. This funciton creats the tuple (a,b,c,run,range_start,range_stop) in 
+		metadata, where run is the name of the calibration run and range_start/stop is the frequency range over which the
+		calibration is calculated.
 
 		Create a function from a,b,c and it to the effect of attenuators on the input side of the cable loop.
 
@@ -1801,7 +1837,7 @@ class sweep:
 		res = minimize(obj, p0, args=(s21,f), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
 		
 		k = list(res.x/2.0) #devide by 2 to get one way loss
-		k.append(self.metadata.Run)
+		k = k + [self.metadata.Run, f[0], f[-1]]
 
 		self.metadata.Cable_Calibration = self._Cable_Calibration = tuple(k)
 
