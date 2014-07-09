@@ -113,7 +113,16 @@ class metadata:
 class thermometry:
 	def __init__(self):
 		pass
-	def load_MonitoringVI_file(self, filename, temp_list = None):
+	def load_MonitoringVI_file(self, filename, temp_list = None, process_therm = 1):
+		'''Reads in thermometer data text file created by  MonitoringVI, and plots the temperature as a function of time.
+		
+		temp_list is a list of tuples, [(heater_voltage,temperature), ...] which are plotted on top of the temperature
+		versus time points. This allows one to visually check the calibration, temp_list.
+
+		process_therm is the column number of the thermometer whose data is processed by several filtering algorithms and
+		plotted.
+		'''
+
 		import io
 		from scipy.signal import gaussian,wiener, filtfilt, butter,  freqz
 		from scipy.ndimage import filters
@@ -134,34 +143,40 @@ class thermometry:
 			Voltages = 'Unknown'
 
  		with io.open(filename,mode='r') as f:
- 			temp_data_header = f.readline()
- 			pos  = max(temp_data_header.find('PM'),temp_data_header.find('AM')) 
- 			if pos >0:
- 				therm_list = [t for t in temp_data_header[pos+2:].strip().split('\t') if (t != 'None') | (t != '')]
- 			else:
- 				therm_list = [None]
+ 			
+ 			temp_data_header = ''
+ 			while temp_data_header.strip() =='':
+ 				temp_data_header = f.readline()
+
+ 			therm_list = [t for t in temp_data_header.strip().split('\t')[1:] if (t.strip() != 'None') & (t.strip() != '')]
  			
 
 		temp_data = np.loadtxt(filename, dtype=np.float, comments='#', delimiter=None, converters=None, skiprows=3, usecols=None, unpack=False, ndmin=0)
 		
+		num_col  = temp_data.shape[1]
+		start_col = 1 #index of first column in data that has thermometer data
+		if process_therm > num_col - start_col:
+			print('process_therm = {} exceeds number of thermometers in data. Choose an lower number. Aborting...'.format(process_therm))
+			return
+
 		# Gaussian Filter
 		num_pts_in_gaussian_window = 20
 		b = gaussian(num_pts_in_gaussian_window, 10)
-		ga = filters.convolve1d(temp_data[:,1], b/b.sum())
+		ga = filters.convolve1d(temp_data[:,process_therm], b/b.sum())
 
 		# buterworth Filter
-		npts = temp_data[:,1].size
+		npts = temp_data[:,process_therm].size
 		end = temp_data[-1,0]
 		dt = end/float(npts)
 		nyf = 0.5/dt	
 		b, a = butter(4, .1)#1.5/nyf)
-		fl = filtfilt(b, a, temp_data[:,1])
+		fl = filtfilt(b, a, temp_data[:,process_therm])
     	
     	#Spline Fit
-		sp = UnivariateSpline(temp_data[:,0], temp_data[:,1])
+		sp = UnivariateSpline(temp_data[:,0], temp_data[:,process_therm])
 
 		#weiner filter
-		wi = wiener(temp_data[:,1], mysize=40, noise=10)
+		wi = wiener(temp_data[:,process_therm], mysize=40, noise=10)
 
 		fig1 = plt.figure( facecolor = 'w',figsize = (10,10))
 		ax = fig1.add_subplot(1,1,1)		
@@ -171,8 +186,6 @@ class thermometry:
 				hline = ax.axhline(y = temp_tuple[1],linewidth=1, color='g', alpha = 0.3 ,linestyle = ':',   label = None)
 
 
-		num_col  = temp_data.shape[1]
-		start_col = 1
 		color_incr = 1.0/(num_col-start_col)
 		for therm_num in xrange(start_col, num_col): # plot all thermometer data present
 			line = ax.plot(temp_data[:,0], temp_data[:,therm_num],color=(0,color_incr*therm_num,0), alpha = 0.4 if therm_num != 1 else 1, linewidth = 3,label = therm_list.pop(0) if therm_list[0] != None else 'Therm{0}'.format(therm_num))
@@ -525,7 +538,7 @@ class sweep:
 	def load_touchstone(self,filename, pick_loop = True):
 		''' The function loads S21 and Freq from  Sonnet .s2p or .s3p files into the Sweep_Array structured np array
 		All Sij are extracted, but only  S21 is saved into Sweep_Array. Future editions of this code might  find need 
-		to load otherSij becuase S21.
+		to load other Sij becuase S21.
 
 		The function only loads one transmission array (S21).  pick_loop = True immediatly selectes this loop as the 
 		current loop.
@@ -1326,7 +1339,7 @@ class sweep:
 							new.Gx = F1;  
 							new.Gy = F2;   
 							new.g = pythag(F1,F2)  
-							lambda_ = LambdaIni        #reset lambda
+							lambda_ = lambda_init     #reset lambda
 							sBest = gBest = REAL_MAX  #reset best circle characteristics 
 							break
 					
@@ -1475,21 +1488,31 @@ class sweep:
 		f_lower_FWHM = f[lower_index]
 		FWHM_est = np.abs(f_upper_FWHM - f_lower_FWHM)
 		fr_est = f[zr_est_index]
+		theta_est = angle(z[zr_est_index])
 		
+		#consider refitting the circle here, or doing ellipse fit.
 
-		
 		#translate circle to origin, and rotate so that z[zr_est_index] has angle 0
 		z = z2 = ma.array((z.data-zc)*np.exp(-j*(angle(zc)-np.pi)), mask = z.mask)
 		
-		
-		
-		#remove points that occur within r_cutoff of the origin of the centered data. 
+		#Compute theta_est before radious cut to prevent radius cut from removing z[f==fr_est]
+		theta_est = angle(z[zr_est_index])	
+
+		#Radius Cut: remove points that occur within r_cutoff of the origin of the centered data. 
 		#(For non-linear resonances that have spurious point close to loop center)	
 		r_fraction = 0.75
 		r_cutoff  = r_fraction*r
-		z = z3 = ma.masked_where(np.abs(z)<r_cutoff,z)
-		f = f3 = ma.array(f,mask = z.mask)
-		
+		z3 = ma.masked_where(np.abs(z)<r_cutoff,z)
+		f3 = ma.array(f,mask = z.mask)
+		mssg = ''
+		# Limit the number of point that Radius Cut can remove?		
+		# if self._points_removed(z, z3)[0] > 1:
+		# 	mssg = ' **Cut cancelled due to removing too many points.**'
+		# else:
+		# 	z = z3
+		# 	f = f3
+
+
 
 		#Bandwidth Cut: cut data that is more than N * FWHM_est away from zr_mag_est
 		N = 10
@@ -1512,8 +1535,7 @@ class sweep:
 		
 
 
-
-		theta_est = np.extract(f==fr_est,z_theta)[0]
+		#theta_est = np.extract(f==fr_est,z_theta)[0] # The old lication of theta_est computation 
 		Q_est = fr_est/FWHM_est
 
 
@@ -1638,7 +1660,7 @@ class sweep:
 
 		if Verbose: 
 			print('Duplicates cuts:\n\t{0} duplicate frequencies removed from loop data, {1} remaining data points'.format(*self._points_removed(z0,z1)))
-			print('Radius cut:\n\t{1} points < r_loop*{0} found and removed, {2} remaining data points'.format(r_fraction,*self._points_removed(z2,z3)))
+			print('Radius cut:\n\t{2} points < r_loop*{0} found and removed, {3} remaining data points{1}'.format(r_fraction,mssg,*self._points_removed(z2,z3)))
 			print('Bandwidth cut:\n\t{1} points outside of fr_est +/- {0}*FWHM_est removed, {2} remaining data points'.format(N, *self._points_removed(z3,z4)))
 			print('Angle jump cut:\n\t{1} points with loop angle step > {0} deg removed, {2} remaining data points'.format(theta_cutoff, *self._points_removed(z4,z5)))
 			print('Initial Guess:\n\tLoop rotation {0}, fr {1}, Q {2}'.format(*p0))
@@ -1675,7 +1697,7 @@ class sweep:
 			
 			text = ('$*Resonator Properties*$\n' + '$Q =$ ' + '{0:.2f}'.format(self.loop.Q) +'\nf$_0$ = ' + '{0:.6f}'.format(self.loop.fr/1e6) 
 				+  ' MHz\n$Q_c$ = ' + '{0:.2f}'.format(self.loop.Qc) + '\n$Q_i$ = ' + '{0:.2f}'.format(self.loop.Qi) + '\n|S$_{21}$|$_{min}$ = ' 
-				+ '{0:.2f}'.format(self.loop.depth_est) + ' dB' + '\nBW$_{FWHM}$ = ' + '{0:.3f}'.format(self.loop.FWHM/1e3) +  ' kHz' 
+				+ '{0:.3f}'.format(self.loop.depth_est) + ' dB' + '\nBW$_{FWHM}$ = ' + '{0:.3f}'.format(self.loop.FWHM/1e3) +  ' kHz' 
 				+ '\n$\chi^{2}$ = ' + '{0:.4f}'.format(self.loop.chisquare) + '\n$\phi$ = ' + '{0:.3f}'.format(self.loop.phi) +' deg')
 			bbox_args = dict(boxstyle="round", fc="0.8")        
 			fig1.text(0.10,0.7,text,
@@ -1726,8 +1748,8 @@ class sweep:
 
 		if Add_Temperatures == True:
 			Temperature_Calibration = self.metadata.Temperature_Calibration
-			if (self.Sweep_Array.size == 1) & (self.metadata.Fridge_Base_Temp != None) & (self.Sweep_Array['Heater_Voltage'][0] == 0):
-				#This is usually the case of a survey: done at base temp with no Heater power
+			if (self.metadata.Fridge_Base_Temp != None) & (self.Sweep_Array['Heater_Voltage'][0] == 0): #& (self.Sweep_Array.size == 1):
+				#This is usually the case of a survey or power sweep: done at base temp with no Heater power
 				self.Sweep_Array['Temperature'][0] = self.metadata.Fridge_Base_Temp
 				print('Setting Tempreature to metadata.Fridge_Base_Temp value.')
 				Add_Temperatures = False
@@ -1787,15 +1809,17 @@ class sweep:
 
 			if Add_Temperatures == True:
 				condition = (self.Sweep_Array['Heater_Voltage'][index] + tol > Temperature_Calibration[:,0]) & (self.Sweep_Array['Heater_Voltage'][index] - tol < Temperature_Calibration[:,0])
-				if condition.sum() == 1:
-					self.Sweep_Array['Temperature'][index] = Temperature_Calibration[condition,1][0]
+				if condition.sum() >= 1:
+
+					self.Sweep_Array['Temperature'][index] = Temperature_Calibration[condition,1][0] # <-- Needs to be updated so that duplicate voltages are handled correctly
 				else:
-					print('Unable to match unique temperature to heater voltage value for Sweep_Array[{1}]. {} matches found.'.format(index,condition.sum() ))
+					print('Unable to match unique temperature to heater voltage value for Sweep_Array[{0}]. {1} matches found.'.format(index,condition.sum() ))
 
 			# Clear out loop
-			print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
 			del(self.loop)
-			self.loop = loop() 
+			self.loop = loop()
+		print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
+ 
 
 	def fit_cable_loss(self, freq_range = [500e6, 1e9], Verbose = True, Show_Plot = True):
 		'''produces fit to cable loss in the functional form:
