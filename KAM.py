@@ -109,6 +109,8 @@ class metadata:
 		self.Num_Ranges = None 
 		self.Cable_Calibration = None
 		self.Temperature_Calibration = None # a list of tuples [(heatervoltge1, temperature), (heatervoltage2,temperature, ...)]
+		self.Num_Temperatures = None #number of temperature points taken after every scan for each heater voltage/power
+		self.Thermometer_Configuration = None
 
 class thermometry:
 	def __init__(self):
@@ -215,14 +217,15 @@ class sweep:
 		self.metadata = metadata()
 		
 		self.data_set_contents = np.dtype([
-			("Run"				, 'S10'),
-			("Time_Created"		, 'S40'), # 'S40' for format December 23, 2012 12:34:65.675 PM;  'S12' for format '%Y%m%d%H%M' 
-			("Num_Ranges"		, np.uint8), # uint8 is Unsigned integer (0 to 255)
-			("Num_Powers"		, np.uint8),
-			("Num_Temperatures"	, np.uint8), 
-			("Sensor"			, 'S20'),
-			("Ground_Plane"		, 'S20'),
-			("Path"				, 'S100'),
+			("Run"							, 'S10'),
+			("Time_Created"					, 'S40'), # 'S40' for format December 23, 2012 12:34:65.675 PM;  'S12' for format '%Y%m%d%H%M' 
+			("Num_Ranges"					, np.uint8), # uint8 is Unsigned integer (0 to 255)
+			("Num_Powers"					, np.uint8),
+			("Num_Temperature_Readings"		, np.uint8), 
+			("Num_Temperatures"				, np.uint8),
+			("Sensor"						, 'S20'),
+			("Ground_Plane"					, 'S20'),
+			("Path"							, 'S100'),
 			])
 
 	def _read_scandata_from_file(self,filename_or_path):
@@ -384,22 +387,28 @@ class sweep:
 			obj = itemloop(obj)
 		return obj
 
-	def _define_sweep_data_columns(self, fsteps):
+	def _define_sweep_data_columns(self, fsteps, tpoints):
 		self.metadata.Fsteps = fsteps
+		self.metadata.Num_Temperatures  = tpoints
+
+		if tpoints < 1: # we dont want a shape = (0,) array. We want at least (1,)
+			tpoints = 1
 
 		self.sweep_data_columns = np.dtype([
-			("Fstart"         	, np.float32), # in Hz
-			("Fstop"          	, np.float32), # in Hz
-			("Heater_Voltage" 	, np.float32), # in Volts
-			("Pinput_dB"      	, np.float32), # in dB
-			("Preadout_dB"     	, np.float32), # in dB  - The power at the input of the resonator, not inside the resonator
-			("Temperature"    	, np.float32), # in Kelvin
-			("S21"            	, np.complex128, (fsteps,)), # in complex numbers
-			("Frequencies"    	, np.float32,(fsteps,)), # in Hz
-			("Q"				, np.float32),
-			("Qc"				, np.float32),
-			("Fr"				, np.float32), # in Hz
-			("Is_Valid"			, np.bool),
+			("Fstart"         			, np.float64), # in Hz
+			("Fstop"          			, np.float64), # in Hz
+			("Heater_Voltage" 			, np.float64), # in Volts
+			("Pinput_dB"      			, np.float64), # in dB
+			("Preadout_dB"     			, np.float64), # in dB  - The power at the input of the resonator, not inside the resonator
+			("Thermometer_Voltage_Bias"	, np.float64), # in Volts
+			("Temperature_Readings"    	, np.float64,(tpoints,)), # in Kelvin
+			("Temperature"		    	, np.float64), # in Kelvin
+			("S21"            			, np.complex128, (fsteps,)), # in complex numbers
+			("Frequencies"    			, np.float64,(fsteps,)), # in Hz
+			("Q"						, np.float64),
+			("Qc"						, np.float64),
+			("Fr"						, np.float64), # in Hz
+			("Is_Valid"					, np.bool),
 			])
 
 	def _define_sweep_array(self,index,**field_names):
@@ -436,11 +445,12 @@ class sweep:
 				('HEMT', 'LNA:Id', str,'Id'),  ('HEMT', 'LNA:Vd', str,'Vd'), ('Atten_4K', 'Atten_At_4K', np.float32),
 				('Atten_NA_Output', 'Atten_NA_Output',np.float32), ('Atten_NA_Input','Atten_NA_Input',np.float32),
 				('Atten_RTAmp_Input','Atten_RTAmp_Input',np.float32), ('RTAmp_In_Use', 'RTAmp_In_Use', int),
-				('Elapsed_Time', 'Meaurement_Duration', np.float)]
+				('Elapsed_Time', 'Meaurement_Duration', np.float),('Thermometer_Configuration','Thermometer_Configuration',None),
+				('Thermometer_Bias','Thermometer_Voltage_Bias', None)]
 
 		for t in tags:
 			try:
-				if t[1].find(':')>-1:
+				if t[1].find(':')>-1: #The case of a dictionary
 					t1 = t[1].split(':')
 
 					#This try/except block is for the case where self.metadata.__dict__['?'] is a dictionary
@@ -453,34 +463,53 @@ class sweep:
 			except: 
 				#the case that the field does not exist or that its in an unexpected format
 				#print('Field named {0}{1} is not found. Setting value to None'.format(t[0], (':'+t[3]) if len(t) > 3 else '')) # this usesScandata nomenclature
-				print('Field named {0} is not found. Setting value to None'.format(t[1])) # this uses self.metadata nomenclature
+				print('Field named {0} is not found.'.format(t[1])) # this uses self.metadata nomenclature
 		try:
 			self.metadata.Powers                = self.metadata.Powers.squeeze() #for case there are multiples powers
 		except:
 			self.metadata.Powers                = np.array([self.metadata.Powers]) # for the case there is only one power		
 
-		# Reshape  Heater_Voltage array and  Remove final Heater voltage from self.Heater_Voltage (The final value does just the heater value at which to leave fridge )
+		
+		# Remove nested array for Thermometer_Voltage_Bias data, if this data exists
+		if hasattr(self.metadata,'Thermometer_Voltage_Bias'):
+			self.metadata.Thermometer_Voltage_Bias  = self.metadata.Thermometer_Voltage_Bias.reshape((self.metadata.Thermometer_Voltage_Bias.shape[1],))
+
+		if self.metadata.Thermometer_Configuration != None:
+			self.metadata.Thermometer_Configuration = (str(self.metadata.Thermometer_Configuration.squeeze()[0][0]),str(self.metadata.Thermometer_Configuration.squeeze()[1][0]))
+
+		# Reshape  Heater_Voltage array and  Remove final Heater voltage from self.Heater_Voltage (The final value is just the heater value at which to leave fridge )
 		self.metadata.Heater_Voltage = self.metadata.Heater_Voltage.reshape((self.metadata.Heater_Voltage.shape[1],))
 		self.metadata.Heater_Voltage = self.metadata.Heater_Voltage[0:-1]
 
-		
+
 		print('Loading Run: {0}'.format(self.metadata.Run))
 		print('There are {0} heater voltage(s), {1} input power(s), and {2} frequecy span(s)'.format(self.metadata.Heater_Voltage.shape[0],self.metadata.Powers.shape[0], self.metadata.Freq_Range.shape[0]))
-		heater_voltage_num = 0; power_sweep_num = 0; fsteps = 0;
+		heater_voltage_num = 0; power_sweep_num = 0; fsteps = 0; tpoints = 0;
 
-		# determin fsteps = length of the freq/S21 array
+		# determine fsteps = length of the freq/S21 array
 		if self.metadata.Heater_Voltage.shape[0] == 1:
 			fsteps = self.metadata.Freq_Range[heater_voltage_num][1]['PowerSweep'][0][0][power_sweep_num][2].squeeze()[()].size # non temp sweep, single freq_range, powersweep
+			try: # Try to determine the number of temperture readings per scan. If data does not contain temp readings, pass
+				tpoints = self.metadata.Freq_Range[heater_voltage_num][1]['PowerSweep'][0][0][power_sweep_num][3].squeeze()[()].size
+			except:
+				pass
 		else:					
 			for freq_range_num in xrange(self.metadata.Freq_Range.shape[0]):			
 				steps = self.metadata.Freq_Range[freq_range_num][1]['Temp'][0][0][heater_voltage_num][1]['PowerSweep'][0][0][power_sweep_num][2].squeeze()[()].size
 				fsteps = max(steps,fsteps)
+				try: # Try to determine the number of temperture readings per scan. If data does not contain temp readings, pass
+					points = self.metadata.Freq_Range[freq_range_num][1]['Temp'][0][0][heater_voltage_num][1]['PowerSweep'][0][0][power_sweep_num][3].squeeze()[()].size
+					tpoints = max(points,tpoints)
+				except:
+					pass
 
-		self._define_sweep_data_columns(fsteps)
 
-		self.metadata.Num_Powers= self.metadata.Powers.size
-		self.metadata.Num_Heater_Voltages = self.metadata.Heater_Voltage.size
-		self.metadata.Num_Ranges = self.metadata.Range.shape[0]
+		self._define_sweep_data_columns(fsteps,tpoints)
+
+		
+		self.metadata.Num_Powers 			= self.metadata.Powers.size
+		self.metadata.Num_Heater_Voltages 	= self.metadata.Heater_Voltage.size
+		self.metadata.Num_Ranges 			= self.metadata.Range.shape[0]
 		try:
 			self.metadata.Cable_Calibration = self._Cable_Calibration
 			print('Cable Calibraiton data found and saved in Sweep_Array metadata.')
@@ -492,6 +521,9 @@ class sweep:
 			print('Temperature Calibraiton data found and saved in Sweep_Array metadata.')
 		except:
 			pass
+
+		if self.metadata.Num_Temperatures > 0:
+			print('Temperature readings found for scan(s). {0} readings per scan'.format(self.metadata.Num_Temperatures))
 		### Examples of dealing with Freq_Range Data structure imported from Matlab .mat file			
 		#    k.Freq_Range[heater_voltage_num][1]['PowerSweep']
 		# 					  k.Freq_Range[0][1]['PowerSweep']
@@ -518,13 +550,16 @@ class sweep:
 						self._define_sweep_array(i, Fstart = self.metadata.Range[freq_range_num,0],
 													Fstop = self.metadata.Range[freq_range_num,1],
 													Heater_Voltage = self.metadata.Heater_Voltage[heater_voltage_num],
-													Pinput_dB = sweep[0].squeeze()[()],
+													Thermometer_Voltage_Bias = self.metadata.Thermometer_Voltage_Bias[heater_voltage_num] if hasattr(self.metadata,'Thermometer_Voltage_Bias') else 0,#set to zero unless there is an array of temps in the ScanData
+													Pinput_dB = sweep[0].squeeze()[()] - self.metadata.Atten_Added_At_NA if self.metadata.Atten_Added_At_NA != None else sweep[0].squeeze()[()], #we only want the power coming out of the source, i.e. the NA
 													S21 = sweep[1].squeeze()[()],
-													Frequencies =  sweep[2].squeeze()[()],
+													Frequencies = sweep[2].squeeze()[()],
+													Temperature_Readings = sweep[3].squeeze()[()] if sweep.size > 3 else np.array([0]), #set to zero unless there is an array of temps in the ScanData
 													Is_Valid = True)
 						i = i + 1
 
-
+		if  hasattr(self.metadata,'Thermometer_Voltage_Bias'):
+			del(self.metadata.__dict__['Thermometer_Voltage_Bias'])
 		del(self.metadata.__dict__['Powers'])
 		del(self.metadata.__dict__['Heater_Voltage'])
 		del(self.metadata.__dict__['Range'])
@@ -617,7 +652,8 @@ class sweep:
 				dt = dt_s3p	
 			Touchstone_Data = np.loadtxt(tmp, dtype=dt, comments='!', delimiter=None, converters=None, skiprows=0, usecols=None, unpack=False, ndmin=0)
 		
-		self._define_sweep_data_columns(Touchstone_Data.size)
+		tpoints = 0
+		self._define_sweep_data_columns(Touchstone_Data.size, tpoints)
 		j = np.complex(0,1)
 
 		self.Sweep_Array = np.zeros(1, dtype = self.sweep_data_columns)
@@ -854,11 +890,13 @@ class sweep:
 		''' prints information about the Sweep_Array currently loaded'''
 		Input_Powers = np.unique(self.Sweep_Array['Pinput_dB'])
 		Heater_Voltages = np.unique(self.Sweep_Array['Heater_Voltage'])
+		Temperature_Points = np.shape(self.Sweep_Array['Temperature_Readings'])[1]
 		Number_of_Freq_Ranges = max(np.unique(self.Sweep_Array['Fstart']),np.unique(self.Sweep_Array['Fstop']))
-		print('{0:03.0f} - Total number of sweeps.\n{1:03.0f} - Number of readout powers.\n{2:03.0f} - Number of readout temperatures.\n{3:03.0f} - Number of frequency bands.'.format(
+		print('{0:03.0f} - Total number of sweeps.\n{1:03.0f} - Number of readout powers.\n{2:03.0f} - Number of readout temperatures.\n{3:03.0f} - Number of temperatures readings.\n{4:03.0f} - Number of frequency bands.'.format(
 			self.Sweep_Array.shape[0],
 			Input_Powers.shape[0],
 			Heater_Voltages.shape[0],
+			Temperature_Points,
 			Number_of_Freq_Ranges.shape[0]))
 
 	def construct_hf5_toc(self,filename = database_location):
@@ -877,15 +915,16 @@ class sweep:
 			TOC = np.zeros(num_tables, dtype = self.data_set_contents)
 			index = 0
 			for table in table_list:
-				TOC['Run'][index] 				= table.get_attr('Run') 
-				TOC['Time_Created'][index] 		= table.get_attr('Time_Created')
-				#TOC['Num_Ranges'][index] 		= table.get_attr('Num_Ranges') if 'Num_Ranges' in table.attrs._v_attrnames else 1
-				TOC['Num_Ranges'][index] 		= table.get_attr('Num_Ranges') if table.get_attr('Num_Ranges') !=None else 0
-				TOC['Num_Powers'][index] 		= table.get_attr('Num_Powers') if table.get_attr('Num_Powers') !=None else 0
-				TOC['Num_Temperatures'][index] 	= table.get_attr('Num_Heater_Voltages') if table.get_attr('Num_Heater_Voltages') !=None else 0
-				TOC['Sensor'][index] 			= table.get_attr('Sensor') if table.get_attr('Sensor') !=None else ''
-				TOC['Ground_Plane'][index] 		= table.get_attr('Ground_Plane') if table.get_attr('Ground_Plane') !=None  else ''
-				TOC['Path'][index] 				= table._v_pathname
+				TOC['Run'][index] 						= table.get_attr('Run') 
+				TOC['Time_Created'][index] 				= table.get_attr('Time_Created')
+				TOC['Num_Temperature_Readings'][index]	= table.get_attr('Num_Temperatures') if table.get_attr('Num_Temperatures') !=None else 0
+				#TOC['Num_Ranges'][index] 				= table.get_attr('Num_Ranges') if 'Num_Ranges' in table.attrs._v_attrnames else 1
+				TOC['Num_Ranges'][index] 				= table.get_attr('Num_Ranges') if table.get_attr('Num_Ranges') !=None else 0
+				TOC['Num_Powers'][index] 				= table.get_attr('Num_Powers') if table.get_attr('Num_Powers') !=None else 0
+				TOC['Num_Temperatures'][index] 			= table.get_attr('Num_Heater_Voltages') if table.get_attr('Num_Heater_Voltages') !=None else 0
+				TOC['Sensor'][index] 					= table.get_attr('Sensor') if table.get_attr('Sensor') !=None else ''
+				TOC['Ground_Plane'][index] 				= table.get_attr('Ground_Plane') if table.get_attr('Ground_Plane') !=None  else ''
+				TOC['Path'][index] 						= table._v_pathname
 				index += 1 
 
 		self.TOC = TOC
@@ -1502,8 +1541,8 @@ class sweep:
 		#(For non-linear resonances that have spurious point close to loop center)	
 		r_fraction = 0.75
 		r_cutoff  = r_fraction*r
-		z3 = ma.masked_where(np.abs(z)<r_cutoff,z)
-		f3 = ma.array(f,mask = z.mask)
+		z = z3 = ma.masked_where(np.abs(z)<r_cutoff,z)
+		f = f3 = ma.array(f,mask = z.mask)
 		mssg = ''
 		# Limit the number of point that Radius Cut can remove?		
 		# if self._points_removed(z, z3)[0] > 1:
@@ -1604,7 +1643,6 @@ class sweep:
 		fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta,f), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
 
 		fit = {}
-		
 		if isinstance(Fit_Method,set):      #All string inputs for Fit_Method were changed to sets at the begining of phase_fit
 		   if Fit_Method == {'Multiple'}:
 		      for method in fit_func.keys():
@@ -1640,7 +1678,9 @@ class sweep:
 		lowest = fit[bestfit].fun
 		for key in fit.keys(): 
 			if fit[key].fun < lowest:
+				lowest = fit[key].fun
 				bestfit = key
+		
 
 		
 		self.loop.Phase_Fit_Method = bestfit
@@ -1675,8 +1715,13 @@ class sweep:
 			fig1 = plt.figure( facecolor = 'w',figsize = (10,10))
 			ax = fig1.add_subplot(6,1,1)
 			ax.set_title('Number of points used in fit = '+str(total_used_in_fit)+', Number of points removed = ' + str(total_removed) )
-			line = ax.plot(f1[~f5.mask], np.abs(z1[~z5.mask]),'g-', label = 'Used for Fit')
-			line = ax.plot(f1[f5.mask], np.abs(z1[z5.mask]),'r.',markersize = 2,  alpha = 0.2, label = 'Excluded Data')
+			#line = ax.plot(f1[~f5.mask], np.abs(z1[~z5.mask]),'g-', label = 'Used for Fit') #fails when no points are masked
+			
+			if f5.mask.size <= 1:#this is the case that there are no masked points, e.g. no mask. there will allways be 1 point in the mask due to adjacent distance
+				line = ax.plot(ma.compressed(f1), np.abs(ma.compressed(z1)),'g-', label = 'Used for Fit')
+			else:
+				line = ax.plot(f1[~f5.mask], np.abs(z1[~z5.mask]),'g-', label = 'Used for Fit')
+				line = ax.plot(f1[f5.mask], np.abs(z1[z5.mask]),'r.',markersize = 2,  alpha = 0.2, label = 'Excluded Data')
 			line = ax.plot([f1[zr_est_index],f1[zr_est_index]] , [np.abs(z1[zr_est_index]),np.abs(zc)+r] ,'k.', label = 'Magitude Min and Max')
 			line = ax.plot([f1[lower_index], f1[upper_index], f1[upper_index]], np.abs([z1[lower_index],z1[lower_index],z1[upper_index]]),'yo-', label = 'FWHM Estimate')
 			ax.set_ylabel('Magnitude')
@@ -1690,15 +1735,19 @@ class sweep:
 			line = ax.plot(z1.real, z1.imag,'r:', label = 'Initial Location')
 			line = ax.plot(z3.real, z3.imag,'r-', label = 'Aligned w/ Origin')
 			line = ax.plot(z4.real, z4.imag,'g:', linewidth = 3,label = 'Bandwidth Cut')
-			pt = ax.plot([z1[0].real,z[~z.mask][0].real], [z1[0].imag,z[~z.mask][0].imag],'ko', label = 'First Point')
+			##pt = ax.plot([z1[0].real,z[~z.mask][0].real], [z1[0].imag,z[~z.mask][0].imag],'ko', label = 'First Point') fails when no points are masked
+			pt = ax.plot([z1[0].real,ma.compressed(z)[0].real], [z1[0].imag,ma.compressed(z)[0].imag],'ko', label = 'First Point')
 			pt = ax.plot(z2[zr_est_index].real, z2[zr_est_index].imag,'k*', label = 'Magnitude Min')
-			line = ax.plot(z4[z4.mask].data.real, z4[z4.mask].data.imag,'r.', alpha = 0.2, label = 'Excluded Data')
+
+			#line = ax.plot(z4[z4.mask].data.real, z4[z4.mask].data.imag,'r.', alpha = 0.2, label = 'Excluded Data')
+			line = ax.plot(z5[ma.getmaskarray(z5)].data.real, z5[ma.getmaskarray(z5)].data.imag,'r.', alpha = 0.2,label = 'Excluded Data')
 			ax.legend(loc = 'best', fontsize=10, scatterpoints =1, numpoints = 1, labelspacing = .1)#,numpoints)
 			
 			text = ('$*Resonator Properties*$\n' + '$Q =$ ' + '{0:.2f}'.format(self.loop.Q) +'\nf$_0$ = ' + '{0:.6f}'.format(self.loop.fr/1e6) 
 				+  ' MHz\n$Q_c$ = ' + '{0:.2f}'.format(self.loop.Qc) + '\n$Q_i$ = ' + '{0:.2f}'.format(self.loop.Qi) + '\n|S$_{21}$|$_{min}$ = ' 
 				+ '{0:.3f}'.format(self.loop.depth_est) + ' dB' + '\nBW$_{FWHM}$ = ' + '{0:.3f}'.format(self.loop.FWHM/1e3) +  ' kHz' 
-				+ '\n$\chi^{2}$ = ' + '{0:.4f}'.format(self.loop.chisquare) + '\n$\phi$ = ' + '{0:.3f}'.format(self.loop.phi) +' deg')
+				+ '\n$\chi^{2}$ = ' + '{0:.4f}'.format(self.loop.chisquare) + '\n$\phi$ = ' + '{0:.3f}'.format(self.loop.phi) +' deg' + '\n$- $'+self.loop.Phase_Fit_Method 
+				+ ' fit $-$') 
 			bbox_args = dict(boxstyle="round", fc="0.8")        
 			fig1.text(0.10,0.7,text,
 					ha="center", va="top", visible = True,
@@ -1710,9 +1759,11 @@ class sweep:
 			vline = ax.axvline(x = fit[bestfit].x[1],linewidth=2, color='y', linestyle = ':',   label = r'$f_{r}$')
 			line = ax.plot(f,z_theta,'g-',linewidth = 3,label = 'Data')
 			line = ax.plot(f,(fit[bestfit].x[0] + 2.0*np.arctan(2.0*fit[bestfit].x[2]*(1-f/fit[bestfit].x[1]))),'g:', linewidth = 1, label = 'Fit ')
-			line = ax.plot(f5[~f5.mask][0],z_theta5[~z_theta5.mask][0],'ko',linewidth = 3,label = 'First Point')
+			#line = ax.plot(f5[~f5.mask][0],z_theta5[~z_theta5.mask][0],'ko',linewidth = 3,label = 'First Point') #Failes when  no points are masked
+			line = ax.plot(ma.compressed(f5)[0],ma.compressed(z_theta5)[0],'ko',linewidth = 3,label = 'First Point')
+
 			ax.set_ylabel('Angle [rad]')
-			ax.legend(loc = 'best', fontsize=10,scatterpoints =1, numpoints = 1, labelspacing = .1)
+			ax.legend(loc = 'right', fontsize=10,scatterpoints =1, numpoints = 1, labelspacing = .1)
 			
 			ax = fig1.add_subplot(6,1,6)
 			vline = ax.axvline(x = fit[bestfit].x[1],linewidth=2, color='y', linestyle = ':',   label = r'$f_{r}$')
@@ -1722,7 +1773,7 @@ class sweep:
 				s += 1
 			ax.set_ylabel('Angle [rad]')
 			ax.set_xlabel('Freq [Hz]')
-			ax.legend(loc = 'best', fontsize=10,scatterpoints =1, numpoints = 1, labelspacing = .1)
+			ax.legend(loc = 'right', fontsize=10,scatterpoints =1, numpoints = 1, labelspacing = .1)
 			plt.show()
 
 	def fill_sweep_array(self, Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False ):
@@ -1747,26 +1798,30 @@ class sweep:
 				Preadout = lambda f: k[0]*np.sqrt(f)+k[1]*f+k[2] - Atten_NA_Output - Atten_At_4K
 
 		if Add_Temperatures == True:
-			Temperature_Calibration = self.metadata.Temperature_Calibration
-			if (self.metadata.Fridge_Base_Temp != None) & (self.Sweep_Array['Heater_Voltage'][0] == 0): #& (self.Sweep_Array.size == 1):
-				#This is usually the case of a survey or power sweep: done at base temp with no Heater power
-				self.Sweep_Array['Temperature'][0] = self.metadata.Fridge_Base_Temp
-				print('Setting Tempreature to metadata.Fridge_Base_Temp value.')
-				Add_Temperatures = False
+			if self.metadata.Num_Temperatures < 1:
+				Temperature_Calibration = self.metadata.Temperature_Calibration
+				if (self.metadata.Fridge_Base_Temp != None) & (self.Sweep_Array['Heater_Voltage'][0] == 0): #& (self.Sweep_Array.size == 1):
+					#This is usually the case of a survey or power sweep: done at base temp with no Heater power
+					self.Sweep_Array['Temperature'][:] = self.metadata.Fridge_Base_Temp
+					print('Setting Tempreature to metadata.Fridge_Base_Temp value.')
+					Add_Temperatures = False
 
-			elif type(Temperature_Calibration) == list: 
-				Temperature_Calibration = np.array(Temperature_Calibration)
-				# Temperature_Calibration[:,0] is heater voltages
-				# Temperature_Calibration[:,1] is temperatures voltages
+				elif type(Temperature_Calibration) == list: 
+					Temperature_Calibration = np.array(Temperature_Calibration)
+					# Temperature_Calibration[:,0] is heater voltages
+					# Temperature_Calibration[:,1] is temperatures voltages
+					
+					# becasue ScanData heater voltages are read in as numbers like 0.24999999 and 0.2500001 instread of 0.25
+					# as included in the Temperature_Calibration list/array, use this 'tol' to associate closest ScanData 
+					# heater voltage to voltage in Temperature_Calibration list/array.
+					tol =  0.0005 
 				
-				# becasue ScanData heater voltages are read in as numbers like 0.24999999 and 0.2500001 instread of 0.25
-				# as included in the Temperature_Calibration list/array, use this 'tol' to associate closest ScanData 
-				# heater voltage to voltage in Temperature_Calibration list/array.
-				tol =  0.0005 
-			
+				else:
+					print('Temperature_Calibration metadata is not found or not of the correct type. Unable to add temperatures.')
+					Add_Temperatures = False
 			else:
-				print('Temperature_Calibration metadata is not found or not of the correct type. Unable to add temperatures.')
-				Add_Temperatures = False
+				tol = None
+				pass
 
 
 			
@@ -1808,18 +1863,19 @@ class sweep:
 					self._define_sweep_array(index, Preadout_dB = self.Sweep_Array['Pinput_dB'][index] + fr)
 
 			if Add_Temperatures == True:
-				condition = (self.Sweep_Array['Heater_Voltage'][index] + tol > Temperature_Calibration[:,0]) & (self.Sweep_Array['Heater_Voltage'][index] - tol < Temperature_Calibration[:,0])
-				if condition.sum() >= 1:
+				if self.metadata.Num_Temperatures < 1:
+					condition = (self.Sweep_Array['Heater_Voltage'][index] + tol > Temperature_Calibration[:,0]) & (self.Sweep_Array['Heater_Voltage'][index] - tol < Temperature_Calibration[:,0])
+					if condition.sum() >= 1:
 
-					self.Sweep_Array['Temperature'][index] = Temperature_Calibration[condition,1][0] # <-- Needs to be updated so that duplicate voltages are handled correctly
+						self.Sweep_Array['Temperature'][index] = Temperature_Calibration[condition,1][0] # <-- Needs to be updated so that duplicate voltages are handled correctly
+					else:
+						print('Unable to match unique temperature to heater voltage value for Sweep_Array[{0}]. {1} matches found.'.format(index,condition.sum() ))
 				else:
-					print('Unable to match unique temperature to heater voltage value for Sweep_Array[{0}]. {1} matches found.'.format(index,condition.sum() ))
-
+					self._define_sweep_array(index, Temperature = 	self.Sweep_Array['Temperature_Readings'][index].mean()) 		
 			# Clear out loop
 			del(self.loop)
 			self.loop = loop()
 		print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
- 
 
 	def fit_cable_loss(self, freq_range = [500e6, 1e9], Verbose = True, Show_Plot = True):
 		'''produces fit to cable loss in the functional form:
