@@ -224,7 +224,7 @@ class sweep:
 			("Num_Temperature_Readings"		, np.uint8), 
 			("Num_Temperatures"				, np.uint8),
 			("Sensor"						, 'S20'),
-			("Ground_Plane"					, 'S20'),
+			("Ground_Plane"					, 'S30'),
 			("Path"							, 'S100'),
 			])
 
@@ -359,7 +359,7 @@ class sweep:
 		If return_type is None, ele is returned as whatever type it was saved as in [[[ele]]] '''
 		
 		def cast(_obj):
-			if (return_type != None) & (_obj != None) :
+			if (return_type is not None) & (_obj is not None) : #if (return_type != None) & (_obj != None) :
 				_obj = return_type(_obj)
 				#pass#exec("_obj = {0}(_obj)".format(return_type))
 			return _obj
@@ -415,7 +415,7 @@ class sweep:
 		#for field_name in self.sweep_data_columns.fields.keys():
 		for field_name in field_names:
 			self.Sweep_Array[field_name][index] = field_names[field_name]
-			
+						
 	def load_scandata(self, file_location):
 		''' file_location is the locaiton of the scandata.mat file. It can be a URL, filename or /path/filename.
 		assumes that self.data is in the form of matlab ScanData Structure'''
@@ -474,7 +474,7 @@ class sweep:
 		if hasattr(self.metadata,'Thermometer_Voltage_Bias'):
 			self.metadata.Thermometer_Voltage_Bias  = self.metadata.Thermometer_Voltage_Bias.reshape((self.metadata.Thermometer_Voltage_Bias.shape[1],))
 
-		if self.metadata.Thermometer_Configuration != None:
+		if self.metadata.Thermometer_Configuration is not None:#if self.metadata.Thermometer_Configuration != None:
 			self.metadata.Thermometer_Configuration = (str(self.metadata.Thermometer_Configuration.squeeze()[0][0]),str(self.metadata.Thermometer_Configuration.squeeze()[1][0]))
 
 		# Reshape  Heater_Voltage array and  Remove final Heater voltage from self.Heater_Voltage (The final value is just the heater value at which to leave fridge )
@@ -554,7 +554,7 @@ class sweep:
 													Pinput_dB = sweep[0].squeeze()[()] - self.metadata.Atten_Added_At_NA if self.metadata.Atten_Added_At_NA != None else sweep[0].squeeze()[()], #we only want the power coming out of the source, i.e. the NA
 													S21 = sweep[1].squeeze()[()],
 													Frequencies = sweep[2].squeeze()[()],
-													Temperature_Readings = sweep[3].squeeze()[()] if sweep.size > 3 else np.array([0]), #set to zero unless there is an array of temps in the ScanData
+													Temperature_Readings = sweep[3].squeeze()[()] if (sweep.size > 3) and (np.shape(sweep[3].squeeze()[()])[0] != 0) else np.array([0]), #set to zero unless there is an array of temps in the ScanData
 													Is_Valid = True)
 						i = i + 1
 
@@ -1638,7 +1638,7 @@ class sweep:
 		p0 = np.array([theta_est,fr_est ,Q_est])
 		
 		fit_func = {}
-		fit_func['Powell'] =  lambda : minimize(obj, p0, args=(z_theta,f), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
+		fit_func['Powell'] = lambda : minimize(obj, p0, args=(z_theta,f), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
 		fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(z_theta,f), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
 		fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta,f), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
 
@@ -1877,7 +1877,7 @@ class sweep:
 			self.loop = loop()
 		print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
 
-	def fit_cable_loss(self, freq_range = [500e6, 1e9], Verbose = True, Show_Plot = True):
+	def fit_cable_loss(self, freq_range = [400e6, 1e9], Verbose = True, Show_Plot = True):
 		'''produces fit to cable loss in the functional form:
 		term1 + term2 + term3 = a * sqrt(f) + b * f + c
 		term1 is the sum of inner and outer coaxial cable conductor losses
