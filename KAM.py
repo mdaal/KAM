@@ -9,7 +9,7 @@ import numpy as np
 import tables
 import matplotlib.pyplot as plt
 import datetime
-from scipy.optimize import minimize, leastsq
+from scipy.optimize import minimize, leastsq# , root,newton_krylov, anderson
 
 import numpy.ma as ma
 import sys # for status percentage
@@ -61,6 +61,7 @@ class loop:
 		self.Q_est = None
 
 		#fit quantities
+		self.mask = None 
 		self.Q = None 
 		self.Qc = None
 		self.Qi = None
@@ -69,13 +70,18 @@ class loop:
 		self.phi = None
 		self.chisquare = None
 		self.pvalue = None
-		self.Phase_Fit_Method = None
+		self.phase_fit_method = None
+		self.phase_fit_success = None
 
 	def __del__(self):
 		pass
 		
 
 class metadata:
+	'''Every data set (e.g. as survey, power sweep, temp sweep) is stored as a pytable. 
+	Each pytable has an metadata instance associated with it. 
+	This specifies the contents of the metadata.
+	'''
 	def __init__(self):
 		self.Time_Created = None
 		self.Atten_Added_At_NA = None # redundant if self.Atten_NA_Input and self.Atten_NA_Output are defined; should be merged somehow
@@ -83,6 +89,7 @@ class metadata:
 		self.Fridge_Base_Temp = None
 		self.Box = None
 		self.Ground_Plane = None
+		self.Ground_Plane_Thickness = None
 		self.LNA = None
 		self.IFBW = None
 		self.Test_Location = None
@@ -94,6 +101,11 @@ class metadata:
 		self.Min_Freq_Resolution = None
 		self.Run = None
 		self.Sensor = None
+		self.Resonator_Width = None #list if more than one
+		self.Resonator_Thickness = None #list if more than one
+		self.Resonator_Impedance = None
+		self.Resonator_Eeff = None # Resonator Dielectric Constant
+		self.Through_Line_Impedance = None
 		self.Fridge_Run_Start_Date = None
 		self.Fsteps  = None
 		#self.IS_Sonnet_Simulation = None
@@ -111,6 +123,7 @@ class metadata:
 		self.Temperature_Calibration = None # a list of tuples [(heatervoltge1, temperature), (heatervoltage2,temperature, ...)]
 		self.Num_Temperatures = None #number of temperature points taken after every scan for each heater voltage/power
 		self.Thermometer_Configuration = None
+
 
 class thermometry:
 	def __init__(self):
@@ -379,11 +392,21 @@ class sweep:
 		else:
 			while obj.dtype == np.dtype('O'):
 				obj = obj.item()
-			try:
-				obj = obj[field]
-			except:
+				
+			if isinstance(obj.item(), unicode): 
 				obj = None
-				print('Field named {0} is not found. Returning None'.format(field))
+				print('Expected dictionary containing field named {0} is not found. Returning None'.format(field))				
+			else: #if the object does not simply contain a string, e.g  [u'InP #2'], do this
+				try:
+					obj = obj[field]
+				except:
+					obj = None
+					print('Field named {0} is not found. Returning None'.format(field))	
+			# try:
+			# 	obj = obj[field]
+			# except:
+			# 	obj = None
+			# 	print('Field named {0} is not found. Returning None'.format(field))
 			obj = itemloop(obj)
 		return obj
 
@@ -409,6 +432,7 @@ class sweep:
 			("Qc"						, np.float64),
 			("Fr"						, np.float64), # in Hz
 			("Is_Valid"					, np.bool),
+			("Mask"						, np.bool,(fsteps,)), # array mask selecting data used in phase fit
 			])
 
 	def _define_sweep_array(self,index,**field_names):
@@ -979,7 +1003,7 @@ class sweep:
 		# rotation angle and rescaling factor computed from 'base'
 		base = 0
 		offset = -1
-		normalization = np.abs(S21[base])
+		normalization = np.abs(S21[base:5]).mean()
 
 		def obj(t):
 			''' Build objective function to minimize
@@ -1487,9 +1511,10 @@ class sweep:
 		
 
 		# Remove duplicate frequency elements in z and f, e.g. places where f[n] = f[n+1]
-		f_adjacent_distance = np.abs(f[:-1]-f[1:])
-		z = z1 = ma.masked_where(f_adjacent_distance==0.0, z[:-1])
-		f = f1 = ma.array(f[:-1],mask = z.mask) #Syncronize mask of f to match mask of z
+		f_adjacent_distance =  np.hstack((np.abs(f[:-1]-f[1:]), [0.0]))
+		z = z1 = ma.masked_where(f_adjacent_distance==0.0, z)
+		f = f1 = ma.array(f,mask = z.mask) #Syncronize mask of f to match mask of z
+		
 
 
 		#Estimate Resonance frequency using minimum Dip or max adjacent distance
@@ -1539,36 +1564,38 @@ class sweep:
 
 		#Radius Cut: remove points that occur within r_cutoff of the origin of the centered data. 
 		#(For non-linear resonances that have spurious point close to loop center)	
-		r_fraction = 0.75
-		r_cutoff  = r_fraction*r
-		z = z3 = ma.masked_where(np.abs(z)<r_cutoff,z)
+		r_fraction_in = 0.75
+		r_fraction_out = 1.75
+		r_cutoff_in  = r_fraction_in*r
+		r_cutoff_out = r_fraction_out*r		
+		z = z3 = ma.masked_where((np.abs(z2)<r_cutoff_in) | (np.abs(z2)>r_cutoff_out),z2, copy = True)
+		# for substantially deformed loops we make sure that no more than Max_Removed_Radius_Cut points are removed from inner radious cut
+		Max_Removed_Radius_Cut = 25
+		while self._points_removed(z2, z3)[0] > Max_Removed_Radius_Cut:
+			r_fraction_in = r_fraction_in - 0.02
+			r_cutoff_in  = r_fraction_in*r
+			z = z3 = ma.masked_where((np.abs(z2)<r_cutoff_in) | (np.abs(z2)>r_cutoff_out),z2, copy = True)
+			#print 'loosening cut'
+			if r_fraction_in <= 0:
+				break
 		f = f3 = ma.array(f,mask = z.mask)
-		mssg = ''
-		# Limit the number of point that Radius Cut can remove?		
-		# if self._points_removed(z, z3)[0] > 1:
-		# 	mssg = ' **Cut cancelled due to removing too many points.**'
-		# else:
-		# 	z = z3
-		# 	f = f3
-
 
 
 		#Bandwidth Cut: cut data that is more than N * FWHM_est away from zr_mag_est
-		N = 10
-		z = z4 = ma.masked_where((f > fr_est + N*FWHM_est) | (fr_est - N*FWHM_est > f),z)
+		N = 8
+		z = z4 = ma.masked_where((f > fr_est + N*FWHM_est) | (fr_est - N*FWHM_est > f),z,copy = True)
 		f = f4 = ma.array(f,mask = z.mask)
 		z_theta = angle(z)
 
 
-		#Angle jump cut : masks points where angle jumps to next branch, +/- theta_cutoff
-		theta_cutoff = 345 #degrees
+		#Angle jump cut : masks points where angle jumps to next branch of angle function, 
 		mask = (f > fr_est + 0.5*FWHM_est) | (f < fr_est + -0.5*FWHM_est)
 		f_in_FWHM = ma.masked_where(mask,f) # or alternatively: f_in_FWHM = f; f_in_FWHM[mask] = ma.masked 
 		edge1,edge2 = ma.flatnotmasked_edges(f_in_FWHM)
 		angle_slope = (z_theta[edge2]-z_theta[edge1])/(f[edge2]-f[edge1]) # angle is decreasing if negative slope
 		upper_cond = ((f > fr_est +  0.5*FWHM_est) & ((z_theta[edge2]<z_theta) if (angle_slope<0) else (z_theta[edge2]>z_theta))) 
 		lower_cond = ((f < fr_est + -0.5*FWHM_est) & ((z_theta[edge1]>z_theta) if (angle_slope<0) else (z_theta[edge1]<z_theta))) 
-		z = z5 = ma.masked_where(lower_cond|upper_cond,z)
+		z = z5 = ma.masked_where(lower_cond|upper_cond,z, copy = True)
 		f = f5 = ma.array(f,mask = z.mask)
 		z_theta = z_theta5 = ma.array(z_theta,mask = z.mask)
 		
@@ -1584,10 +1611,10 @@ class sweep:
 		#f = f[~f.mask]
 		#z_theta = z_theta[~z_theta.mask]
 
-		# These commands return np array
-		#z = ma.compressed(z)
-		#f = ma.compressed(f)
-		#z_theta  = ma.compressed(z_theta)
+		#These commands return np array
+		z_c = ma.compressed(z)
+		f_c = ma.compressed(f)
+		z_theta_c  = ma.compressed(z_theta)
 		
 
 		if mysys.startswith('Windows'):
@@ -1635,12 +1662,13 @@ class sweep:
 			residual  = z_theta - theta - 2.0*np.arctan(2.0*Q*(1-f/fr))	
 			return residual
 
+		#p0 is the initial guess
 		p0 = np.array([theta_est,fr_est ,Q_est])
 		
 		fit_func = {}
-		fit_func['Powell'] = lambda : minimize(obj, p0, args=(z_theta,f), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
-		fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(z_theta,f), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
-		fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta,f), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
+		fit_func['Powell'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
+		fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
+		fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
 
 		fit = {}
 		if isinstance(Fit_Method,set):      #All string inputs for Fit_Method were changed to sets at the begining of phase_fit
@@ -1681,9 +1709,9 @@ class sweep:
 				lowest = fit[key].fun
 				bestfit = key
 		
-
-		
-		self.loop.Phase_Fit_Method = bestfit
+		self.loop.phase_fit_success = fit[bestfit].success
+		self.loop.mask = z5.mask
+		self.loop.phase_fit_method = bestfit
 		self.loop.Q = Q = fit[bestfit].x[2]
 		self.loop.Qc = Qc = Q/(2*r)
 		self.loop.Qi = Q*Qc/(Qc-Q)
@@ -1700,9 +1728,9 @@ class sweep:
 
 		if Verbose: 
 			print('Duplicates cuts:\n\t{0} duplicate frequencies removed from loop data, {1} remaining data points'.format(*self._points_removed(z0,z1)))
-			print('Radius cut:\n\t{2} points < r_loop*{0} found and removed, {3} remaining data points{1}'.format(r_fraction,mssg,*self._points_removed(z2,z3)))
+			print('Radius cut:\n\t{2} points < r_loop*{0} or > r_loop*{1} found and removed, {3} remaining data points'.format(r_fraction_in, r_fraction_out,*self._points_removed(z2,z3)))
 			print('Bandwidth cut:\n\t{1} points outside of fr_est +/- {0}*FWHM_est removed, {2} remaining data points'.format(N, *self._points_removed(z3,z4)))
-			print('Angle jump cut:\n\t{1} points with loop angle step > {0} deg removed, {2} remaining data points'.format(theta_cutoff, *self._points_removed(z4,z5)))
+			print('Angle jump cut:\n\t{0} points with discontinuous jumps in loop angle removed, {1} remaining data points'.format(*self._points_removed(z4,z5)))
 			print('Initial Guess:\n\tLoop rotation {0}, fr {1}, Q {2}'.format(*p0))
 
 			for method in fit.keys():
@@ -1711,7 +1739,7 @@ class sweep:
 
 
 		if Show_Plot:
-			total_removed, total_used_in_fit = self._points_removed(z1,z5)
+			total_removed, total_used_in_fit = self._points_removed(z0,z5)
 			fig1 = plt.figure( facecolor = 'w',figsize = (10,10))
 			ax = fig1.add_subplot(6,1,1)
 			ax.set_title('Number of points used in fit = '+str(total_used_in_fit)+', Number of points removed = ' + str(total_removed) )
@@ -1736,7 +1764,7 @@ class sweep:
 			line = ax.plot(z3.real, z3.imag,'r-', label = 'Aligned w/ Origin')
 			line = ax.plot(z4.real, z4.imag,'g:', linewidth = 3,label = 'Bandwidth Cut')
 			##pt = ax.plot([z1[0].real,z[~z.mask][0].real], [z1[0].imag,z[~z.mask][0].imag],'ko', label = 'First Point') fails when no points are masked
-			pt = ax.plot([z1[0].real,ma.compressed(z)[0].real], [z1[0].imag,ma.compressed(z)[0].imag],'ko', label = 'First Point')
+			pt = ax.plot([z1[0].real,ma.compressed(z5)[0].real], [z1[0].imag,ma.compressed(z5)[0].imag],'ko', label = 'First Point') #--
 			pt = ax.plot(z2[zr_est_index].real, z2[zr_est_index].imag,'k*', label = 'Magnitude Min')
 
 			#line = ax.plot(z4[z4.mask].data.real, z4[z4.mask].data.imag,'r.', alpha = 0.2, label = 'Excluded Data')
@@ -1746,7 +1774,7 @@ class sweep:
 			text = ('$*Resonator Properties*$\n' + '$Q =$ ' + '{0:.2f}'.format(self.loop.Q) +'\nf$_0$ = ' + '{0:.6f}'.format(self.loop.fr/1e6) 
 				+  ' MHz\n$Q_c$ = ' + '{0:.2f}'.format(self.loop.Qc) + '\n$Q_i$ = ' + '{0:.2f}'.format(self.loop.Qi) + '\n|S$_{21}$|$_{min}$ = ' 
 				+ '{0:.3f}'.format(self.loop.depth_est) + ' dB' + '\nBW$_{FWHM}$ = ' + '{0:.3f}'.format(self.loop.FWHM/1e3) +  ' kHz' 
-				+ '\n$\chi^{2}$ = ' + '{0:.4f}'.format(self.loop.chisquare) + '\n$\phi$ = ' + '{0:.3f}'.format(self.loop.phi) +' deg' + '\n$- $'+self.loop.Phase_Fit_Method 
+				+ '\n$\chi^{2}$ = ' + '{0:.4f}'.format(self.loop.chisquare) + '\n$\phi$ = ' + '{0:.3f}'.format(self.loop.phi) +' deg' + '\n$- $'+self.loop.phase_fit_method 
 				+ ' fit $-$') 
 			bbox_args = dict(boxstyle="round", fc="0.8")        
 			fig1.text(0.10,0.7,text,
@@ -1775,6 +1803,19 @@ class sweep:
 			ax.set_xlabel('Freq [Hz]')
 			ax.legend(loc = 'right', fontsize=10,scatterpoints =1, numpoints = 1, labelspacing = .1)
 			plt.show()
+
+			# fig = plt.figure( figsize=(5, 5), dpi=150)
+			# ax = {}
+			# ax[1] = fig.add_subplot(1,1,1)
+			# #dff = (f5 - fr)/fr
+			# dff = f5 
+			# curve = ax[1].plot(dff,np.abs(z5))
+			# ax[1].ticklabel_format(axis='x', style='sci',scilimits = (0,0), useOffset=True)	
+
+			# for k in ax.keys():
+			# 	ax[k].tick_params(axis='y', labelsize=9)
+			# 	ax[k].tick_params(axis='x', labelsize=5)
+			# plt.show()
 
 	def fill_sweep_array(self, Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False ):
 		
@@ -1849,7 +1890,11 @@ class sweep:
 
 				self._define_sweep_array(index, Q = self.loop.Q,
 												Qc = self.loop.Qc,
-												Fr = self.loop.fr)
+												Fr = self.loop.fr,
+												Mask = self.loop.mask)
+
+				if self.loop.phase_fit_success == False:
+					self._define_sweep_array(index, Is_Valid = False)
 
 			if Compute_Preadout == True:
 				if self.loop.fr != None:
@@ -1935,15 +1980,424 @@ class sweep:
 			ax.legend(loc = 'best', fontsize=10,scatterpoints =1, numpoints = 1, labelspacing = .1)
 			plt.show()
 
+	# def _extract_wafer_label(self,string_input):
+	# 	'''returns first word in string for which all cased characters are upper case are AND for which the word is entirely 
+	# 	alpha numeric (no '-', '(', etc) AND for which word is >= 4 characters. returns warning if there are two matches or no matches.
+	# 	'''
+		
+	# 	matches = 0
+	# 	wafer_label = None
+	# 	split_string = string_input.replace('(','|').replace(')','|').replace(' ','|').split('|')[::-1] # reversed so that first occurance comes last
+	# 	for word in split_string:
+	# 		if word.isalnum() and word.isupper() and len(word) >= 4:
+	# 			wafer_label = word
+	# 			matches = matches + 1
+	# 	if matches > 1:
+	# 		warnings.warn('More than one wafer label found. Using first match.')
+	# 	if matches == 0:
+	# 		warnings.warn('No wafer label matches found. Returning None')
 
+	# 	return wafer_label
+
+	# def _extract_sensor_id(self):
+	# 	sensor = self.metadata.Sensor
+	# 	wafer_label  = self._extract_wafer_label(sensor)
+
+	# 	split_string  = sensor.replace(wafer_label ,'').split()
+	# 	matches = 0
+	# 	sensor_id = None
+	# 	for word in split_string:
+	# 		if word.isalnum() and word.isupper() and len(word) <= 4:
+	# 			sensor_id = word
+	# 			matches = matches + 1
+	# 	if matches > 1:
+	# 		warnings.warn('More than one sensor id found. Using first match.')
+	# 	if matches == 0:
+	# 		warnings.warn('No sensor id matches found. Returning None')
+
+	# 	return sensor_id
 
 		
+
+	# def _extract_width(self):
+	# 	''' extracts resonator width from self.metadata.Sensor, then sets self.metadata.Resonator_Width to this value and 
+	# 	returns value as well '''
+	# 	sensor = self.metadata.Sensor
+	# 	e = sensor.rfind('um')
+	# 	s = e - 1
+	# 	while True:
+	# 		if sensor[s-1].isdigit() is True:
+	# 			s = s -1;
+	# 		else:
+	# 			break
+	# 	width  = int(sensor[s:e])
+	# 	self.metadata.Resonator_Width = width
+	# 	return width
+
+	def nonlinear_fit(self, Fit_Method = 'Multiple', Verbose = True, Show_Plot = True):
+		from scipy.stats import chisquare
+		import time
 		
+		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
+		   Fit_Method={Fit_Method}
+
+		def angle(z, deg = 0):
+			''' If z is a masked array. angle(z) returns the angle of the elements of z
+			within the branch [0,360] instead of [-180, 180], which is the branch used
+			in np.angle(). The mask of angle(z) is set to be the mask of the input, z.
+
+			If z is not a masked array, then angle(z) is the same as np.angle except 
+			that range is [0,360] instead of [-180, 180]
+
+			If z is a vector, then an angle shift is added to z  so the z[0] is 0 degrees
+			If z is a number, then dont shift angle'''
+			a = np.angle(z, deg = deg)
+			try:
+				a = a - a[0] #if a is not a vector, then a[0] will throw an error
+			except:
+				pass
+			p = np.where(a<=0,1,0)
+			n = 2
+			units = n*np.pi if deg == 0 else n*180
+			try:
+				a = ma.array(a + p*units,mask =z.mask) 
+			except:
+				a = a + p*units #if z is not a masked array do this
+			return a
+	
+		Sweep_Array_Record_Index = self.loop.index 
+		V = self.Sweep_Array['Heater_Voltage'][Sweep_Array_Record_Index]
+		Fs = self.Sweep_Array['Fstart'][Sweep_Array_Record_Index]
+		P = self.Sweep_Array['Pinput_dB'][Sweep_Array_Record_Index]
+
+		#Sweep_Array = np.extract((self.Sweep_Array['Heater_Voltage'] == V) & ( self.Sweep_Array['Fstart']==Fs) , self.Sweep_Array)
+		indices = np.where( (self.Sweep_Array['Heater_Voltage'] == V) & ( self.Sweep_Array['Fstart']==Fs))[0]
+		P_min_index = np.where( (self.Sweep_Array['Heater_Voltage'] == V) & ( self.Sweep_Array['Fstart']==Fs) & (self.Sweep_Array['Pinput_dB'] == self.Sweep_Array['Pinput_dB'].min()))[0][0]
+		#P_max_index = np.where( (self.Sweep_Array['Heater_Voltage'] == V) & ( self.Sweep_Array['Fstart']==Fs) & (self.Sweep_Array['Pinput_dB'] == self.Sweep_Array['Pinput_dB'].max()))[0][0]
+		
+		
+		#np.where( (swp.Sweep_Array['Heater_Voltage'] == V) & ( swp.Sweep_Array['Fstart']==Fs))
+
+		#### Fit lowest power loop to obtain extimate of Q, fr
+		self.pick_loop(P_min_index)
+		# Remove Gain Compression
+		self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
+		# Remove Cable Delay
+		self.remove_cable_delay(Show_Plot = False, Verbose = False)	
+		# Fit loop to circle
+		self.circle_fit(Show_Plot = False)
+		# Fit resonance parameters
+		self.phase_fit(Fit_Method = 'Multiple',Verbose = False, Show_Plot = False)
+
+		Q   = self.loop.Q 
+		Qc  = self.loop.Qc 
+		Qtl = self.loop.Qi 
+		f_0 = self.loop.fr 
+
+		widths = np.array([2,4,8,16,32,64,128,256])
+		Z3 = np.array([85.77,67.82,50.176,33.82,21.24,12.72,7.18,3.58])
+		Z3_dict = dict(zip(widths,Z3))
+		Z1 = np.array([52.10,52.10,52.10,52.10,52.10,52.10,52.10,52.10])
+		Z1_dict = dict(zip(widths,Z1))
+		Eeff = np.array([4.196,3.8148,3.2517,2.6174,2.09048,1.7018,1.4482,1.2773])
+		Eeff_dict = dict(zip(widths,Eeff))
+
+
+
+		def _extract_width():
+			''' extracts resonator width from self.metadata.Sensor, then sets self.metadata.Resonator_Width to this value and 
+			returns value as well '''
+			sensor = self.metadata.Sensor
+			e = sensor.rfind('um')
+			s = e - 1
+			while True:
+				if sensor[s-1].isdigit() is True:
+					s = s -1;
+				else:
+					break
+			width  = int(sensor[s:e])
+			self.metadata.Resonator_Width = width
+			return width
+
+		num_sweep_powers = indices.shape[0]	   
+		if num_sweep_powers <= 4:
+			print('Number of sweep powers, {0}, is insufficient to perform gain decompression.'.format(num_sweep_powers))
+			return
+		else:
+			print('Performing gain decompression on {0} sweep powers.'.format(num_sweep_powers))
+
+		#Pna= np.power(10, Sweep_Array['Pinput_dB']/10.0) #mW, Power out of NA
+		#min_index = np.where(Pna == Pna.min())[0][0] # Index of the min values of Pin, unpacked from tuple
+		
+		fig = plt.figure( figsize=(5, 5), dpi=150)
+		ax = {}
+		ax[1] = fig.add_subplot(2,1,1)
+		ax[2] = fig.add_subplot(2,1,2,aspect='equal')
+		
+		print indices
+		power_sweep_list = []
+		for index in indices: #
+			# Clear out loop
+			del(self.loop)
+			self.loop = loop()
+			
+			self.pick_loop(index)
+			Pna = 0.001*np.power(10, self.Sweep_Array['Preadout_dB'][index]/10.0) #W, Power out of NA
+			Z1 = Z1_dict[_extract_width()]
+			Z3 = Z3_dict[_extract_width()]
+			V1 = np.sqrt(Pna*2*Z1)
+
+			# Remove Gain Compression
+			self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
+			# Remove Cable Delay
+			self.remove_cable_delay(Show_Plot = False, Verbose = False)	
+			# Fit loop to circle
+			self.circle_fit(Show_Plot = False)
+
+
+			j = np.complex(0,1)
+
+			zc = self.loop.a + j*self.loop.b
+			r = self.loop.r
+
+			f = f0 = self.loop.freq
+			z = z0 = self.loop.z
+			
+
+			# Remove duplicate frequency elements in z and f, e.g. places where f[n] = f[n+1]
+			f_adjacent_distance = np.abs(f[:-1]-f[1:])
+			z = z1 = ma.masked_where(f_adjacent_distance==0.0, z[:-1],copy=True)
+			f = f1 = ma.array(f[:-1],mask = z.mask) #Syncronize mask of f to match mask of z
+
+
+			#Estimate Resonance frequency using minimum Dip or max adjacent distance
+			Use_Dip = 1 
+			if Use_Dip: #better for non-linear resonances with point near loop center
+				zr_mag_est = np.abs(z).min()
+				zr_est_index = np.where(np.abs(z)==zr_mag_est)[0][0]
+			else:
+				z_adjacent_distance = np.abs(z[:-1]-z[1:])
+				zr_est_index = np.argmax(z_adjacent_distance) 
+				zr_mag_est = np.abs(z[zr_est_index])
+
+
+			#Transmission magnitude off resonance 
+			Use_Fit = 1
+			if Use_Fit:
+				z_max_mag = np.abs(zc)+r
+			else: #suspected to be better for non-linear resonances
+				z_max_mag = np.abs(z).max()
+
+			#Depth of resonance in dB
+			depth_est = 20.0*np.log10(zr_mag_est/z_max_mag)
+
+			#Magnitude of resonance dip at half max
+			res_half_max_mag = (z_max_mag+zr_mag_est)/2
+
+			#find the indices of the closest points to this magnitude along the loop, one below zr_mag_est and one above zr_mag_est
+			a = np.square(np.abs(z[:zr_est_index+1]) - res_half_max_mag)
+			lower_index = np.argmin(a)
+			a = np.square(np.abs(z[zr_est_index:]) - res_half_max_mag)
+			upper_index = np.argmin(a) + zr_est_index
+
+			#estimate the FWHM bandwidth of the resonance
+			f_upper_FWHM = f[upper_index]
+			f_lower_FWHM = f[lower_index]
+			FWHM_est = np.abs(f_upper_FWHM - f_lower_FWHM)
+			fr_est = f[zr_est_index]
+			theta_est = angle(z[zr_est_index])
+			
+
+
+			#translate circle to origin, and rotate so that z[zr_est_index] has angle 0
+			z = z2 = ma.array((z.data-zc)*np.exp(-j*(angle(zc)-np.pi)), mask = z.mask)
+			
+			# #Compute theta_est before radious cut to prevent radius cut from removing z[f==fr_est]
+			# theta_est = angle(z[zr_est_index])	
+
+			#Radius Cut: remove points that occur within r_cutoff of the origin of the centered data. 
+			#(For non-linear resonances that have spurious point close to loop center)	
+			r_fraction = 0.75
+			r_cutoff_in  = r_fraction*r
+			r_cutoff_out = ((1-r_fraction) +1)*r
+			z = z3 = ma.masked_where((np.abs(z)<r_cutoff_in) | (np.abs(z)>r_cutoff_out),z,copy=True)
+			f = f3 = ma.array(f,mask = z.mask)
+
+
+			#Bandwidth Cut: cut data that is more than N * FWHM_est away from zr_mag_est
+			N = 10
+			z = z4 = ma.masked_where((f > fr_est + N*FWHM_est) | (fr_est - N*FWHM_est > f),z,copy=True)
+			f = f4 = ma.array(f,mask = z.mask)
+			z_theta = angle(z)
+
+
+			#Angle jump cut : masks points where angle jumps to next branch, +/- theta_cutoff
+			theta_cutoff = 345 #degrees
+			mask = (f > fr_est + 0.5*FWHM_est) | (f < fr_est + -0.5*FWHM_est)
+			f_in_FWHM = ma.masked_where(mask,f) # or alternatively: f_in_FWHM = f; f_in_FWHM[mask] = ma.masked 
+			edge1,edge2 = ma.flatnotmasked_edges(f_in_FWHM)
+			angle_slope = (z_theta[edge2]-z_theta[edge1])/(f[edge2]-f[edge1]) # angle is decreasing if negative slope
+			upper_cond = ((f > fr_est +  0.5*FWHM_est) & ((z_theta[edge2]<z_theta) if (angle_slope<0) else (z_theta[edge2]>z_theta))) 
+			lower_cond = ((f < fr_est + -0.5*FWHM_est) & ((z_theta[edge1]>z_theta) if (angle_slope<0) else (z_theta[edge1]<z_theta))) 
+			z = z5 = ma.masked_where(lower_cond|upper_cond,z,copy=True)
+			f = f5 = ma.array(f,mask = z.mask)
+			# z_theta = z_theta5 = ma.array(z_theta,mask = z.mask)		
+
+			#translate circle to origin, and rotate so that z[zr_est_index] has angle 0
+			z = z6 = ma.array(np.abs(zc)+z.data*np.exp(j*(-np.pi)), mask = z.mask)
+			f = f6 = ma.array(f,mask = z.mask)
+
+			###PLot Mask Data
+			#dff = (f0- f_0)/f_0
+			#curve =ax[1].plot(dff[~z6.mask],np.ma.abs(z0)[~z6.mask])
+			#curve = ax[2].plot(z6.real[~z6.mask],z6.imag[~z6.mask]) 
+
+			###PLot Compressed Data
+			dff = (f6.compressed()- f_0)/f_0
+			curve =ax[1].plot(dff,np.ma.abs(z6.compressed()))
+			curve = ax[2].plot(z6.compressed().real,z6.compressed().imag) 
+			#curve = ax[2].plot(z6.compressed()[0:10].real,z6.compressed()[0:10].imag,'k*') 
+			power_sweep_list.append((V1,z6.compressed(),f6.compressed(),Z1, Z3))
+			print(V1)
+			#power_sweep_list.append((V1,z6,f6,Z1, Z3))
+
+		
+		print len(power_sweep_list)
+
+		#ax[1].ticklabel_format(axis='x', style='sci',scilimits = (0,0), useOffset=True)	
+		def progress(x):
+			print x
 
 
 
 
 
+		V30V30 = 1e-4 #Q # Brings quantities in the minmization to O(1)
+		def obj(p):
+			f_0,Qtl,Qc,phi31,eta,delta,g,a,b,phi,tau = p
+			
+			#residual = np.array([])
+			sumsq = 0
+			for sweep in power_sweep_list:
+				V1e, S21e, f, Z1, Z3 = sweep #V1e, S21e -- experimental values of these quantities
+				V1  = g*V1e
+
+				#S21 = np.complex(a,b)+ np.exp(np.complex(0,phi))*S21e*V1e/V1 
+				S21 = np.complex(a,b)+ np.exp(np.complex(0,phi)+ np.complex(0,2.0*np.pi*tau)*f)*S21e
+				V3  = (S21 + (np.exp(np.complex(0,2.0*phi31)) - 1.0)/2.0 )*V1*np.exp(np.complex(0,-1.0*phi31))*np.sqrt(Z3*Qc/(Z1*np.pi))
+				v1 = V3*V3.conjugate()
+
+				#Now we use |V3V3|^2 = v1 to calculate the other two roots of the cubic, v2 and v3
+				z1 = eta/(Qtl*V30V30)+ np.complex(0,1.0)*(2*delta*f)/(V30V30*f_0)
+				z2 = (1.0/Qc) + (1/Qtl) + np.complex(0,2.0) *(f-f_0)/f_0
+				z1z2c = z1*z2.conjugate()
+				z1z1 = z1*z1.conjugate()
+				z2z2 = z2*z2.conjugate()
+				#v1 = V3__*V3__.conjugate()
+				term1 = -(z1z2c.real/z1z1) - v1/2.0
+				term2 = np.complex(0,1)*np.sqrt(4*z1z2c.imag*z1z2c.imag + 3*v1*v1*z1z1*z1z1 + 4*z1z1*z1z2c.real*v1)/(2*z1z1)
+				v2  = term1 + term2
+				v3  = term1 - term2
+
+				V3p = np.sqrt(v2)
+				V3m = np.sqrt(v3)
+
+
+
+				# _equality =  ((eta/Qtl) + np.complex(0,2.0*delta)*(f/f_0))*np.square(np.abs(V3))*V3 + V3*(V30V30/Qc) + V3*(V30V30/Qtl) + V3*np.complex(0,2.0*V30V30)*(f-f_0)/f_0
+				# equality_ = np.sqrt(Z3/(np.pi*Qc*Z1))*np.exp(np.complex(0,phi31))*V30V30*V1
+				# residual  = _equality - equality_
+				# sumsq = np.square(np.abs(residual)).sum()  + sumsq				
+
+				
+				s21 = ((1-np.exp(np.complex(0,2.0)*phi31))/2 +( (1/Qc) / ((1/Qc) + (1/Qtl)*(1+eta*v1/V30V30) + np.complex(0,2)* (((f-f_0)/f_0) + delta*(v1/V30V30)*(f/f_0))))*np.exp(np.complex(0,2.0)*phi31))
+				diff = S21 - s21
+				# #diff = v3*v2+v3*v1+v1*v2 - z2z2/z1z1
+				# #diff = v3*v3*v3 + v2*v2*v2 + v1*v1*v1 - 
+				# #diff = v3*v2*v1 - V1*V1.conjugate()*Z3/(Qc*Z1*z1z1)
+				# #diff = (v3 + v1 + v2) -  2*z1z2c.real/z1z1
+				sumsq = (diff*diff.conjugate()).real.sum()  + sumsq
+				# #sumsq = diff.sum()  + sumsq
+				#sumsq = (diff*diff.conjugate()).real.sum()
+				#residual  = np.hstack((residual,sumsq))
+			return sumsq
+			#return residual
+
+
+		phi31_est = np.pi/2
+		eta_est = 0.001
+		delta_est = 0.001
+		g_est = 1.0
+		a_est = 0.
+		b_est = 0.
+		
+		phi_est = 0.
+		tau_est = 0.0
+		p0 = np.array([f_0,Qtl,Qc,phi31_est,eta_est,delta_est,g_est,a_est,b_est, phi_est,tau_est ])
+
+
+
+
+		start = time.time()
+		#x = minimize(obj, p0, method='L-BFGS-B', jac=None, hess=None, hessp=None, bounds=((300e6,3e9),(20e3,2e6),(10e3,800e3),(0, 3.142), (None,None), (None,None),(0.1,8), (None,None),(None,None), (0,6.284)), constraints=(), tol=1e-19, callback=None, options={'disp':True})		
+		#x = newton_krylov(obj, p0, method='gmres', verbose=1, callback=progress)
+		#x = anderson(obj, p0, verbose=1, callback=progress)
+		#x = root(obj, p0, callback=progress)
+		x = minimize(obj, p0, method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=None, tol=1e-20, callback=progress, options={'disp':True, 'maxiter': 70, 'maxfev': 50000, 'ftol':1e-14,'xtol':1e-14}) #maxfev: 11137 defaults: xtol=1e-4, ftol=1e-4,
+		#x = minimize(obj, p0, method='CG', jac=None, hess=None, hessp=None, bounds=None, constraints=None, tol=1e-20, callback=progress, options={'disp':True, 'maxiter': 70, 'maxfev': 50000, 'ftol':1e-14,'xtol':1e-14}) #maxfev: 11137 defaults: xtol=1e-4, ftol=1e-4,
+		
+		finished = time.time()
+		elapsed = (finished - start )/60.0 #minutes
+		print 'Minimization took {} minutes'.format(elapsed)
+		print x
+		print p0
+
+		if x.success == True:
+			f_00 = f_0 # this is the res freq of the lowest power resonator estimated from phase fit 
+			f_0,Qtl,Qc,phi31,eta,delta,g, a,b, phi,tau = x.x
+			vline = ax[1].axvline(x = (f_0-f_00)/f_00,linewidth=1, color='y', linestyle = ':',   label = r'$f_{r}$')
+			
+			for sweep in power_sweep_list:
+				V1, S21, f, Z1, Z3 = sweep			
+				V1 = g*V1
+				V1V1 = np.square(V1)
+				#print V1
+				V3V3 = np.empty(f.shape)
+				
+				V3 = np.empty_like(f)
+				V2_out = np.empty_like(f,dtype = np.complex256)
+				for n in xrange(f.shape[0]):
+					coefs    = np.array([np.square(delta * f[n]/V30V30 )+ np.square(eta*f_0/(2*Qtl*V30V30)), 2*(delta*(f[n]-f_0)*f[n]/V30V30 + (eta*f_0*f_0/(4*Qtl*V30V30))*((1/Qc) + (1/Qtl)) ),np.square(f[n]-f_0) +  np.square((f_0/(2*Qtl)) + (f_0/(2*Qc)) ),  -1.0*f_0*f_0*Z3*V1V1/(4*np.pi*Qc*Z1)])
+					roots    = np.roots(coefs)
+					V3V3[n]  = np.extract(~np.iscomplex(roots),roots).min().real #Returns the Maximum of the Real Roots. This is the upsweep value.
+					#V3[n]    = np.sqrt(V3V3[n])
+					V2_out[n] = V1*((1-np.exp(np.complex(0,2.0)*phi31))/2 +( (1/Qc) / ((1/Qc) + (1/Qtl)*(1+eta*V3V3[n]/V30V30) + np.complex(0,2)* (((f[n]-f_0)/f_0) + delta*(V3V3[n]/V30V30)*(f[n]/f_0))))*np.exp(np.complex(0,2.0)*phi31))
+			
+				dff = (f- f_00)/f_00
+				#S21fit = ((V2_out  - np.complex(a,b))/V1 )*np.exp(np.complex(0,-phi)) 
+				S21fit = ((V2_out/V1) - np.complex(a,b))*np.exp(np.complex(0,-phi)+ np.complex(0,-tau*2.0*np.pi)*f) 
+				curve =ax[1].plot(dff,np.abs(S21fit), linestyle = ':', color = 'c')
+				curve = ax[2].plot(S21fit.real,S21fit.imag, linestyle = ':', color = 'c') 
+
+
+		ax[2].ticklabel_format(axis='x', style='sci',scilimits = (0,0), useOffset=True)	
+		for k in ax.keys():
+			ax[k].tick_params(axis='y', labelsize=9)
+			ax[k].tick_params(axis='x', labelsize=5)
+		plt.show()
+
+		return x
+		#need bounds and downsample vectors
+		#add mag parameter to S21 (e.g n*S21) <-- Results in fit failure
+		#try synthesis method again remove V1  instability
+		#add time of calculation
+		#add recalculate cable delay
+		#add cavity amplitude subplot
+		#try nonlinear optimizer
+
+		#Note: curves are ft reasonably well when max solution is selected. If Min solution is selected, the fit is bad. 
+		#This might suggest the upsweep  data is insufficient for good fit. Or maybe first we fit to the upsweep data, then we construct down sweep data
+		#and minimize difference between it and the measurment.
 
 
 
