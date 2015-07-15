@@ -1,0 +1,735 @@
+if 0:
+	try:
+		del swp
+	except:
+		pass
+
+	reload(iqsweep_ucb)
+
+	swp =  iqsweep_ucb.IQsweep()
+
+
+
+	#swp.LoadMat(mat,0)
+	swp.LoadSWP('0-1-54.swp',0)
+	print('Data Loaded')
+	swp.FitMagMP()
+	print('Mag Fit Done')
+	swp.FitLoopMP()
+	print('Loop Fit Done')
+
+if 0:
+	import KAM
+	reload(KAM)
+	k = KAM.sweep()
+	#k.download_data('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run45b/P_Sweep/Feb6/ScanData_Backup.mat') # single Res powersweep
+	#k.download_data('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run45a/TP_Sweep/ScanData_Backup.mat') #single res TP sweep
+	#k.download_data('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run33b/TP_Sweep/33b_ScanData_52mK_201172315038.mat') #multiple resonator (e.g multiple freq ranges) TP sweep
+	#k.download_data('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run44b/TP_Sweep/44b_ScanData_40mK_201312196158.mat') # Single re TP sweep, run 44b temp power sweep
+	#k.download_data('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run44b/Survey/44b_ScanData_40mK_20131218112528.mat') # Survey run 44b survey, single power
+	#k.download_data('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run44a/TP_Sweep/44a_ScanData_40mK_20131220154159.mat') # Single Res TP sweep, complete data -- BAD Resonance
+	k.download_data('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run40b/TP_Sweep/40b_ScanData_57mK_20127421435.mat') # Singel Res Temp Power Sweep
+	k.load_scandata()
+	#range_num = 0; heater_voltage = 6; k.Freq_Range[range_num][1]['Temp'][0][0][heater_voltage][1]['PowerSweep']
+	#range_num = 0 when there is only 1  frequency range number
+
+	# import tables 
+	# fileh = tables.open_file("test.h5", mode="r")
+	# fileh.root.ScanData.Freq_Range
+	# fileh.root.ScanData.Freq_Range[:]['Pinput_dB']
+	# fileh.close()
+
+if 0:
+	#need to invoke %pylab
+	fig1 = figure()
+	ax1 = fig1.add_subplot(111)
+	ax1.set_xlabel('Power in [mW]')
+	Pout = np.abs(k.Sweep_Array['S21'][:,-1])*10**(k.Sweep_Array['Pinput_dB']/10.0)
+	Pin = 10**(k.Sweep_Array['Pinput_dB']/10.0)
+	line1 = ax1.plot(Pin,Pout, 'b-', label = 'Data')
+	#could extend slope to index greater than 1
+	slope = (Pout[1] - Pout[0])/(Pin[1]-Pin[0])
+	ideal = slope*(Pin[:]-Pin[0]) + Pout[0]
+	line2 = ax1.plot([Pin[0],Pin[-1]],[ideal[0],ideal[-1]] , 'r-', label = 'Ideal')
+	ax1.set_ylabel('Power out [mW]', color='b')
+	ax1.grid()
+	show()
+
+	correction_factor = ideal[:]/Pout[:]
+
+	fig2 = figure()
+	ax2 = fig2.add_subplot(111)
+	ax2.set_xlabel('Freq [mW]')
+	S21_dB_Measure = 10*np.log10(np.abs(k.Sweep_Array['S21'][-1,:]))
+	S21_dB_Measure = 10*np.log10(np.abs(k.Sweep_Array['S21'][-1,:]))
+
+if 0:
+
+	def file_len(fname):
+		'''count number lines in file'''
+		with open(fname) as f:
+			for i, l in enumerate(f):
+				pass
+		return i + 1
+
+if 0:
+	%pylab
+	import tables 
+
+	# fileh = tables.open_file("test.h5", mode="r")
+	# fileh.root.ScanData.Freq_Range
+	# fileh.root.ScanData.Freq_Range[:]['Pinput_dB']
+	# fileh.close()
+
+	#for g in fileh.walk_nodes(classname = 'Table'):
+	#	print g
+
+	#n._v_pathname
+	l = [g._v_pathname for g in fileh.walk_nodes(classname = 'Table')]
+	l = [g.attrs.Run for g in fileh.walk_nodes(classname = 'Table')]
+	#for k in f:
+	#	print k
+	sweep_data_columns = np.dtype([("Fstart"         	, np.float32), ("Fstop"          	, np.float32), ("Heater_Voltage" 	, np.float32), ("Pinput_dB"      	, np.float32), ("Temperature"    	, np.float32),("S21"            	, np.complex128, (fsteps,)),("Frequencies"    	, np.float32,(fsteps,)), ])
+	
+	fileh = tables.open_file('44b_sing_res_TP_sweep.h5', mode = 'a')
+	TOC = fileh.create_table('/', 'Contents', data_set_contents, "Table listing all data contained in h5 file", tables.Filters(0))
+	TOC.append([('44b', '201404161723',1,2,3,'S1','ESAT4','/Run44b/201404161723')])
+	#fileh.close()
+	fileh.create_table('/Run44b','201405231723',description=sweep_data_columns,title = 'test of table creation',filters=tables.Filters(0), createparents=True)
+	fileh.create_table(where, name, description=None, title='', filters=None, expectedrows=10000, chunkshape=None, byteorder=None, createparents=False, obj=None)
+	fileh.get_node(TOC[1]['Path'])
+
+if 0:
+	import KAM
+	reload(KAM)
+	temp = KAM.thermometry()
+	filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/TP_Sweep/Run49a_Temperatures'
+	#filename = '/Users/miguel_daal/Desktop/Some_Data/TempData/Run44a_131219_Fix140627'
+
+	temp.load_MonitoringVI_file(filename)
+
+if 0: 
+	import KAM
+	reload(KAM)
+	swp = KAM.sweep()
+	filename = '/Users/miguel_daal/Desktop/Some_Data/Calibrations/Cables_140520/Channel_1_Coax_2_50mK_KIDs_Run_50a_ScanData_37mK_2014520183338_Fixed20140625.mat'
+	swp.load_scandata(filename)
+	index = 1 
+	swp.pick_loop(index)
+	swp.fit_cable_loss(Verbose = False)
+	filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/TP_Sweep/49a_ScanData_45mK_2014420142743.mat'
+	
+	swp._Temperature_Calibration = [(0.7, 0.602), (0.65,0.559), (0.6,0.502), (0.55,0.4456), (0.5,0.375), (0.45,0.3289), (0.4,0.290), (0.35,0.2524), (0.3, 0.2167), (0.25,0.184), (0.225,0.165), (0.2,0.1484), (0.175,0.1324), (0.15,0.1158), (0.1,0.0802), (0.0,0.0372)]
+	swp.load_scandata(filename)
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
+
+
+if 0:
+	import KAM
+	reload(KAM)	
+	Run51aP	= KAM.sweep(); Run51aP.load_hf5('/Run51a/T201411162028',filename = database_location);
+	Run51aP.pick_loop(index)
+	Run51aP.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
+	Run51aP.remove_cable_delay(Show_Plot = False, Verbose = False) 
+	Run51aP.circle_fit(Show_Plot = False) 
+	Run51aP.phase_fit(Fit_Method = 'Multiple',Verbose = True, Show_Plot = True)
+
+if 0:
+	import KAM
+	reload(KAM)
+	swp = KAM.sweep()
+	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run44a/P_Sweep/44a_ScanData_60mK_20131210213718.mat' #p input issue	
+	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run51b/TP_Sweep/51b_ScanData_Merged_42mK_20141128.mat'
+	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/TP_Sweep/49a_ScanData_45mK_2014420142743.mat'
+	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/Survey/49a_ScanData_45mK_2014417175147.mat' #survey
+	filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/P_Sweep/49a_ScanData_45mK_201442443323.mat' #P sweep
+	swp.load_scandata(filename)
+	index = 0
+	swp.pick_loop(index)
+
+
+if 0:
+	import KAM
+	reload(KAM)
+	swp = KAM.sweep()
+	filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/TP_Sweep/49a_ScanData_45mK_2014420142743.mat'
+	#filename = 'S5cellsize.s2p'
+	
+
+	#swp.load_touchstone(filename)
+	#swp.load_hf5('40b_Single_Res_TP_Sweep.h5')
+	#swp.load_scandata('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run33b/TP_Sweep/33b_ScanData_52mK_201172315038.mat')
+	#swp.load_scandata('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run44b/Survey/44b_ScanData_40mK_20131218112528.mat')
+	filename = '/Users/miguel_daal/Desktop/Some_Data/Calibrations/Cables_140520/Channel_1_Coax_2_50mK_KIDs_Run_50a_ScanData_37mK_2014520183338_Fixed20140625.mat'
+	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run48a/P_Sweep/48a_ScanData_45mK_201433112722.mat'
+	swp.load_scandata(filename)
+	index = 1 
+	swp.pick_loop(index)
+	swp.fit_cable_loss(Verbose = False)
+	filename = '/Users/miguel_daal/Desktop/Some_Data/Run44b/P_Sweep/44b_ScanData_60mK_2013121105756.mat' #S5 p sweep
+	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run48a/TP_Sweep/48a_ScanData_70mK_201433101142.mat'
+	#filename = '/Volumes/STORE N GO/KIPS_Data/Run49a/TP_Sweep/49a_ScanData_45mK_2014420142743.mat'
+	#filename = '/Volumes/STORE N GO/KIPS_Data/Run33b/TP_Sweep/33b_ScanData_52mK_201172315038.mat'
+	
+	swp.load_scandata(filename)
+	swp.metadata.Atten_At_4K = 30
+	swp.metadata.Atten_NA_Output = 20
+	swp.Sweep_Array['Pinput_dB'] = swp.Sweep_Array['Pinput_dB']+20
+	
+	index = 1 
+	swp.pick_loop(index)
+
+	#swp.plot_loop()
+	#swp.trim_loop(N = 5)
+	#swp.plot_loop()
+	# Remove Cable Delay
+	#Loop = swp.remove_cable_delay(Loop, Show_Plot = False)
+
+	# Fit loop to circle
+	#Loop = swp.circle_fit(Loop)
+
+if 0: 
+	import KAM
+	reload(KAM)
+	swp = KAM.sweep()
+	swp.load_hf5('40b_Single_Res_TP_Sweep.h5')
+	index = 1 
+	swp.pick_loop(index)
+
+	# Remove Gain Compression
+	swp.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False)
+
+	# Remove Cable Delay
+	swp.remove_cable_delay(Show_Plot = False)	
+
+	# Fit loop to circle
+	swp.circle_fit(Show_Plot = True)
+
+	# Fit resonance parameters
+	swp.phase_fit(Fit_Method = 'Multiple',Verbose = True, Show_Plot = True)
+
+if 0:
+	#Accessing swp.Sweep_Array
+	 s = swp.Sweep_Array.view(np.recarray)
+	 s.Temperature
+
+
+	 s.dtype.names # see the names of the columns
+	 #swp.Sweep_Array.view(np.float64).reshape(swp.Sweep_Array.shape + (-1,))
+
+
+if 0:
+	# import tables 
+	# fileh = tables.open_file("test.h5", mode="r")
+	# fileh.root.ScanData.Freq_Range
+	# fileh.root.ScanData.Freq_Range[:]['Pinput_dB']
+	# fileh.close()
+	%pylab
+	import KAM
+	reload(KAM)
+	k = KAM.sweep()
+	k.load_hf5('40b_Single_Res_TP_Sweep.h5')
+	index = 1
+	S21 = k.Sweep_Array['S21'][index]
+	Freq = k.Sweep_Array['Frequencies'][index]
+	
+	# Remove Gain Compression
+	S21_Decompressed = k.decompress_gain(index, Compression_Calibration_Index = -1, Show_Plot = False)
+	
+	# Remove Cable Delay
+	S21_Corrected = k.remove_cable_delay(Freq, S21_Decompressed, Show_Plot = False)
+
+	# Fit loop to circle
+	circle = k.circle_fit(Freq, S21_Corrected )
+
+
+	#fig1           = plt.figure(figsize = (10,10))
+	#ax2 = fig1.add_subplot(111, aspect='equal')
+	
+
+	# plot measured points with gain decompressed and cable delay removed
+	#line1 = ax2.plot(S21_Corrected.real,S21_Corrected.imag,'g-', label = 'measured')
+
+
+	# plot fit to measured points
+	#pts = np.linspace(0, 2.0*np.pi, num=50, endpoint=True)
+	#line2 = ax2.plot(circle.a + circle.r*np.cos(pts),circle.b + circle.r*np.sin(pts),'k-', label = ' fit to measured')
+	
+
+
+	
+
+	def reject_outliers(data, m = 30.):
+		''' data argument in is the resonance loop, a complex vector.
+		this function cumputes the vector distance between adjavcent points
+		compares the vector distance against its median (choosen becuase 
+		median is less sensitive to outliers than mean).
+		outputs a shortened data vector consisting of only those points which
+		are a factor m less than the median and rejects points greater than
+		a factor m from the median.'''
+		adjacent_distance = np.abs(data[:-1]-data[1:])
+		d = np.abs(adjacent_distance - np.median(adjacent_distance))
+		mdev = np.median(d)
+		s = d/mdev if mdev else 0
+		mask = np.where(s<m, True, False)
+		return np.extract(mask, data[:-1])
+	#outliers_rejected = reject_outliers(S21_Corrected, m = 30.)
+	#line3 = ax2.plot(outliers_rejected.real, outliers_rejected.imag,'r-', marker = '*', label = 'outliers rejected')
+	#circle2,exit_code = k.circle_fit(Freq, outliers_rejected )
+	#line4 = ax2.plot(circle2.a + circle2.r*np.cos(pts),circle.b + circle.r*np.sin(pts),'c-', label = 'fit to outliers rejected')
+
+	
+
+
+	#Rotate and center circle
+	#fig2           = plt.figure(figsize = (10,10))
+	#ax3 = fig2.add_subplot(111, aspect='equal')
+	j = np.complex(0,1)
+	ang = np.angle(S21_Corrected[0])
+	circle.z = S21_Corrected#*np.exp(-j*(ang+np.pi/2))
+	circle.freq = Freq
+	zr = circle.a + j*circle.b
+	z = circle.z
+	f = circle.freq 
+	#z =  (z - zr)
+	offset_angle = np.angle(z[0]) + np.pi # seems to be better than np.angle(zr)
+	z =  (z - zr)*np.exp(-j*offset_angle)
+	#line1 = ax2.plot(z.real, z.imag,'r-', label = 'aligned with origin')
+	#print('angle(zr) is ', np.angle(zr,deg = 1),'angle(z) is before rotation', np.angle(circle.z[0],deg = 1),'first and last angle', np.angle(z[0], deg = 1), ' last angle is  ',np.angle(z[-1], deg = 1))
+	#ax3.legend(loc = 'best', fontsize=9)
+	#ax2.legend(loc = 'best', fontsize=9)
+
+	dx = S21_Corrected.real-circle.a
+	dy = S21_Corrected.imag-circle.b
+	circle_dist = np.sqrt(np.square(dx)+np.square(dy))-circle.r
+
+	
+	
+
+	## Rotate circle to align with branch [-pi, pi]
+	#j = np.complex(0,1)
+	ang = np.angle(S21_Corrected[0])
+	circle.z = S21_Corrected#*np.exp(-j*(ang+np.pi/2))
+	circle.freq = Freq
+	circle3  = k.phase_fit(circle)
+	print('Q is ' + str(circle.Q))
+	print('Qc is ' + str(circle.Qc))
+	print('Qi is ' + str(circle.Qi))
+	print('fr is ' + str(circle.fr))
+	print('FMWH Est is ' + str(circle.FWHM_est))
+
+	# def angle(z, deg = 0):
+	# 	a = np.angle(z, deg = deg)
+	# 	#s = (-np.sign(a)+1)/2.0
+	# 	#s = np.vectorize(lambda a: 0.0 if np.sign(a) <= 0 else 1.0)
+	# 	s = np.where(a<0,1,0)
+	# 	units = 2*np.pi if deg == 0 else 360.0
+	# 	return a + s*units
+
+	# fig3           = plt.figure(figsize = (10,10))
+	# ax5 = fig3.add_subplot(111)
+	
+	# # plot fit to measured points
+	# pts = np.linspace(0, 2.0*np.pi, num=50, endpoint=True)
+	# z = np.cos(pts)+j*np.sin(pts)
+	# ang = angle(z,deg = True)
+	# # plot measured points with gain decompressed and cable delay removed
+	# line1 = ax5.plot(pts, ang,'g-', linewidth = 3,label = 'starting at 0')
+
+	# ang = np.angle(z, deg = True)
+	# line2 = ax5.plot(pts, ang,'k-', linewidth = 3,label = 'starting at 180')
+	# ax5.legend(loc = 'best', fontsize=12)
+
+	#line1 = ax2.plot(circle3.z.real,circle3.z.imag,'g.-')
+	# fig3 = plt.figure(figsize = (6,6))
+	# ax10 = fig3.add_subplot(111)
+	# j = np.complex(0,1)
+	# zr = circle.a + j*circle.b
+	# z = circle.z
+	# print('first and last angle', np.angle(z[0], deg = 1), np.angle(z[-1], deg = 1))
+	# z =  (z - zr)*np.exp(-j*np.angle(zr))
+	# print('first and last angle', np.angle(z[0], deg = 1), np.angle(z[-1], deg = 1))
+	# #line5 = ax2.plot(z.real, z.imag,'y-', marker = '*')
+	# line1 = ax10.plot(Freq,np.angle(z),'g-')
+	# line2 = ax10.plot(Freq,np.arctan2(z.imag, z.real),'k-')
+	# ang  = np.linspace(0,2*np.pi, 50)
+	# x = array([  2.22142374e-01,   7.64094606e+08,   9.80506262e+00]) #x = np.array([theta,fr,Q])
+	# line2 = ax10.plot(Freq,np.angle(z) + x[0] - 2.0*np.arctan(2.0*x[2]*(1-Freq/x[1])),'r-')
+	
+	#plt.show()
+ 
+	
+
+
+if 0:
+	Sweep_Array_Record_Index = 2
+	fig1           = plt.figure(figsize = (6,6))
+	Freq           = k.Sweep_Array[Sweep_Array_Record_Index]['Frequencies']
+	S21 		   = k.Sweep_Array[Sweep_Array_Record_Index]['S21']
+
+	j = np.complex(0,1)
+	S21_Corrected= np.exp(2*np.pi*Freq*j*90*10**-9)*S21
+
+	#majorFormatter = FormatStrFormatter('%d')
+	majormaxnlocator    = MaxNLocator(nbins = 5)
+	minormaxnlocator    = MaxNLocator(nbins = 5*5)
+
+	from scipy.optimize import minimize
+	base = 0
+	offset = -1
+
+	def obj(t):
+		S21a = np.exp(2*np.pi*Freq[base]*j*t)*S21[base]
+		S21b = np.exp(2*np.pi*Freq[base+offset]*j*t)*S21[base+offset]
+		return np.abs(S21a-S21b)
+	out = minimize(obj,100*10**-9, method='Nelder-Mead')
+
+
+
+	ax2 = fig1.add_subplot(111, aspect='equal')
+	line2 = ax2.plot(S21.real,S21.imag, color='blue', linestyle='solid', linewidth = 3, label = 'Measured') 
+	line1 = ax2.plot(S21_Corrected.real, S21_Corrected.imag, 'g-',linewidth = 3, label = 'Corrected')
+	ax2.grid()
+	ax2.set_title('Resonance Loop', fontsize=9)
+	plt.setp(ax2.get_xticklabels(),rotation = 45)
+	#ax2.legend(loc = 'best')
+
+	fig1.subplots_adjust(wspace = 0.6,bottom = 0.09, top = 0.1)
+	#fig1.suptitle('Run: {0}, Sensor: {1}, Ground Plane: {2}, Readout Power: {3} dBm, Date: {4}'.format(self.Run, self.Sensor,self.Ground_Plane,self.Sweep_Array[Sweep_Array_Record_Index]['Pinput_dB'],self.Time_Created), fontsize=10)
+	#plt.tight_layout()
+	plt.setp(fig1, tight_layout = True)
+	plt.show()
+
+if 0: 
+
+
+	import numpy as np
+	H00 = 8.
+	H = -5.
+	H11 = 3.
+
+	# H00 = 1.
+	# H = 2.
+	# H11 = 3.
+
+
+	L1 = ( H00 + H11 + np.sqrt(np.square(H11-H00) + 4*H*H) )/2.0
+	L2 = ( H00 + H11 - np.sqrt(np.square(H11-H00) + 4*H*H) )/2.0
+
+	e = (L1 - H00 ) / H
+
+
+	Hess = np.array([[H00, H] , [H, H11]])
+	e1 =  (1.0/np.sqrt(1+e*e)) * np.array([[1,e]]).T
+	e2 =  (1.0/np.sqrt(1+e*e)) * np.array([[e,-1]]).T
+
+	Q = np.array([e1,e2]).flatten().reshape((2,2))
+	D = np.array([[L1, 0] , [0, L2]])
+
+	print(Hess)
+	print(Q.dot(D.dot(Q.T)))
+
+if 0:
+	import numpy.ma as ma
+	f = f0 = circle.freq
+	z = z0 = circle.z
+	def angle(z, deg = 0):
+		''' If z is a masked array. angle(z) returns the angle of the elements of z
+		within the branch [0,360] instead of [-180, 180], which is the branch used
+		in np.angle(). The mask of angle(z) is set to be the mask of the input, z.
+
+		If z is not a masked array, then angle(z) is the same as np.angle except 
+		that range is [0,360] instead of [-180, 180]
+
+		If z is a vector, then an angle shift is added to z  so the z[0] is 0 degrees
+		If z is a number, then dont shift angle'''
+		a = np.angle(z, deg = deg)
+		try:
+			a = a - a[0] #if a is not a vector, then a[0] will throw an error
+		except:
+			pass
+		p = np.where(a<=0,1,0)
+		n = 2
+		units = n*np.pi if deg == 0 else n*180
+		try:
+			a = ma.array(a + p*units,mask =z.mask) 
+		except:
+			a = a + p*units #if z is not a masked array do this
+		return a
+	z_theta = angle(z)
+	#hessian
+	def hess(x):
+		theta,fr,Q = x	
+		H = np.zeros((3,3), dtype = np.float)
+		ff = (1-(f/fr))
+		denom = (1+4.0*np.square(ff*Q))
+		numer = (-theta+z_theta-2.0*np.arctan(2.0*ff*Q))
+		H[0,0] = (2.0*np.ones_like(z_theta)).sum()
+		H[0,1] = ((8.0*f*Q)/(np.square(fr)*denom)).sum()
+		H[0,2] = ((8.0*ff)/denom).sum()
+		H[1,0] = H[0,1] #((8.0*f*Q)/(np.square(fr)*denom)).sum()
+		H[1,1] = (((32.0*np.square(f*Q))/(np.power(fr,4)*np.square(denom)))  +   ((64.0*np.square(f)*ff*np.power(Q,3)*numer)/(np.power(fr,4)*np.square(denom)))   +  ((16.0*f*Q*numer)/(np.power(fr,3)*denom))).sum()
+		H[1,2] = (((32.0*f*Q*ff)/np.square(fr*denom))  +  ((64.0*f*np.square(ff*Q)*numer)/(np.square(fr*denom)))  - ((8.0*f*numer)/(np.square(fr)*denom))).sum()
+		H[2,0] = H[0,2] #((8.0*ff)/denom).sum()
+		H[2,1] = H[2,1] #(((32.0*f*ff*Q)/np.square(fr*denom))  +  ((64.0*f*np.square(ff*Q)*numer)/(np.square(fr*denom)))  -  ((8.0*f*numer)/(np.square(fr)*denom))).sum()
+		H[2,2] = (((32.0*np.square(ff))/np.square(denom))  +  ((64.0*np.power(ff,3)*Q*numer)/np.square(denom))).sum()
+
+		return H
+
+	# {{2,
+	# (8. f Q)/(fr^2 (1+4. (1-f/fr)^2 Q^2)),
+	# (8. (1-f/fr))/(1+4. (1-f/fr)^2 Q^2)},
+
+
+
+	
+	# {(8. f Q)/(fr^2 (1+4. (1-f/fr)^2 Q^2)),
+	# (32. f^2 Q^2)/(fr^4 (1+4. (1-f/fr)^2 Q^2)^2)+(64. f^2 (1-f/fr) Q^3 (-theta+z_theta-2. ArcTan[2. (1-f/fr) Q]))/(fr^4 (1+4. (1-f/fr)^2 Q^2)^2)+(16. f Q (-theta+z_theta-2. ArcTan[2. (1-f/fr) Q]))/(fr^3 (1+4. (1-f/fr)^2 Q^2)),
+	# (32. f (1-f/fr) Q)/(fr^2 (1+4. (1-f/fr)^2 Q^2)^2)+(64. f (1-f/fr)^2 Q^2 (-theta+z_theta-2. ArcTan[2. (1-f/fr) Q]))/(fr^2 (1+4. (1-f/fr)^2 Q^2)^2)-(8. f (-theta+z_theta-2. ArcTan[2. (1-f/fr) Q]))/(fr^2 (1+4. (1-f/fr)^2 Q^2))},
+	
+
+	
+	# {(8. (1-f/fr))/(1+4. (1-f/fr)^2 Q^2),
+	# (32. f (1-f/fr) Q)/(fr^2 (1+4. (1-f/fr)^2 Q^2)^2)+(64. f (1-f/fr)^2 Q^2 (-theta+z_theta-2. ArcTan[2. (1-f/fr) Q]))/(fr^2 (1+4. (1-f/fr)^2 Q^2)^2)-(8. f (-theta+z_theta-2. ArcTan[2. (1-f/fr) Q]))/(fr^2 (1+4. (1-f/fr)^2 Q^2)),
+	# (32. (1-f/fr)^2)/(1+4. (1-f/fr)^2 Q^2)^2+(64. (1-f/fr)^3 Q (-theta+z_theta-2. ArcTan[2. (1-f/fr) Q]))/(1+4. (1-f/fr)^2 Q^2)^2}}
+	#jac
+# def jac(x):
+# 	theta,fr,Q = x
+# 	J = np.zeros((3,),dtype = np.float)    #np.zeros_like(x)
+# 	ff = (1-(f/fr))
+# 	denom = (1+4.0*np.square(ff*Q))
+# 	numer = (-theta+z_theta-2.0*np.arctan(2.0*ff*Q))	
+# 	J[0] = (-2.0*numer).sum()
+# 	J[1] = (-8.0*f*Q*numer/(np.square(fr)*denom)).sum()
+# 	J[2] = (-8.0*ff*numer/denom).sum()
+# 	return J
+
+
+	def jac(x):
+		theta,fr,Q = x
+		J = np.zeros((3,),dtype = np.float)    #np.zeros_like(x)
+		ff = (1-(f/fr))
+		denom = (1+4.0*np.square(ff*Q))
+		numer = (-theta+z_theta-2.0*np.arctan(2.0*ff*Q))	
+		J[0] = np.sum(-2.0*numer)
+		J[1] = np.sum(-8.0*f*Q*numer/(np.square(fr)*denom))
+		J[2] = np.sum(-8.0*ff*numer/denom)
+		return J	
+		#{-2 (-theta+z_theta-2. ArcTan[2. (1-f/fr) Q]),
+		#-((8. f Q (-theta+z_theta-2. ArcTan[2. (1-f/fr) Q]))/(fr^2 (1+4. (1-f/fr)^2 Q^2))),
+		#-((8. (1-f/fr) (-theta+z_theta-2. ArcTan[2. (1-f/fr) Q]))/(1+4. (1-f/fr)^2 Q^2))}
+
+	def obj(x):
+		theta,fr,Q = x
+		return np.square(z_theta - theta - 2.0*np.arctan(2.0*Q*(1-f/fr))).sum()	
+
+
+if 0:
+	database_location = 'Data/My_Data_Library.h5'
+	import KAM
+	reload(KAM)	
+
+	index = 7
+	#52 sweeps - some very nonlinear
+	swp     = KAM.sweep(); swp.load_hf5('/Run48a/T201403311119', filename = database_location); swp.metadata.width = 8;
+	
+	sensor_ids = np.array(['S1','S2','S3','S4','S5','S6','S7','S8','S9','S10','S11','S12','S13','S14','S15','S16'])
+	Z3 = np.array([85.7779239,	67.8250245,	50.1762772,	33.824545,	21.2469277,	12.7273743,	7.18826586,	3.5793348,	78.4335348,	61.6228064,	45.6375047,	31.5852207,	20.407557,	12.372514,	7.10001542,	3.89603542])
+	Z3_dict_1 = dict(zip(sensor_ids,Z3))
+
+	Z1 = np.array([52.1559515,52.1558281,52.1560869,52.1561139,52.1483422,52.144045,52.1437542,52.0581491,51.2646322,51.2662686,51.2663971,51.2663751,51.2663306,51.266291,51.2661294, 51.2656037])
+	Z1_dict_1 = dict(zip(sensor_ids,Z1))
+
+	Eeff = np.array([4.19652819,	3.81480738,	3.25172475,	2.61741572,	2.09048564,	1.70180979,	1.44820567,	1.27737833,	4.0067732,	3.60877767,	3.11707476,	2.590019,	2.10964846,	1.73077079,	1.46394603,	1.29009339])
+	Eeff_dict_1 = dict(zip(sensor_ids,Eeff))
+
+	ground_plane_wafer = np.array(['DSAT3','DSAT4','DSAT5','DSAT6','DSAT7','GSAT1', 'HSA2'])
+	ground_plane_wafer_thickness = np.array([348.0,	309.0,	309.0,	164.0,	85.0,	305.5,	265.33])
+	gp_thickness_dict_1 = dict(zip(ground_plane_wafer,ground_plane_wafer_thickness))
+
+
+	def _set_metadata(Z1_dict,Z3_dict,Eeff_dict,gp_thickness_dict):
+		def _extract_wafer_label(string_input):
+			'''returns first word in string for which all cased characters are upper case are AND for which the word is entirely 
+			alpha numeric (no '-', '(', etc) AND for which word is >= 4 characters. returns warning if there are two matches or no matches.
+			'''
+			
+			matches = 0
+			wafer_label = None
+			split_string = string_input.replace('(','|').replace(')','|').replace(' ','|').split('|')[::-1] # reversed so that first occurance comes last
+			for word in split_string:
+				if word.isalnum() and word.isupper() and len(word) >= 4:
+					wafer_label = word
+					matches = matches + 1
+			if matches > 1:
+				warnings.warn('More than one wafer label found. Using first match.')
+			if matches == 0:
+				warnings.warn('No wafer label matches found. Returning None')
+
+			return wafer_label
+
+		def _extract_sensor_id():
+			sensor = swp.metadata.Sensor
+			wafer_label  = _extract_wafer_label(sensor)
+
+			split_string  = sensor.replace(wafer_label ,'').split()
+			matches = 0
+			sensor_id = None
+			for word in split_string:
+				if word.isalnum() and word.isupper() and len(word) <= 4:
+					sensor_id = word
+					matches = matches + 1
+			if matches > 1:
+				warnings.warn('More than one sensor id found. Using first match.')
+			if matches == 0:
+				warnings.warn('No sensor id matches found. Returning None')
+
+			return sensor_id
+
+			
+
+		def _extract_width():
+			''' extracts resonator width from swp.metadata.Sensor,'''
+			sensor = swp.metadata.Sensor
+			e = sensor.rfind('um')
+			s = e - 1
+			while True:
+				if sensor[s-1].isdigit() is True:
+					s = s -1;
+				else:
+					break
+			width  = int(sensor[s:e])
+			return width	
+
+
+
+
+		gid = _extract_wafer_label(swp.metadata.Ground_Plane)
+		sid = _extract_sensor_id()
+		swp.metadata.Resonator_Width = _extract_width()*1e-6 # in meters
+		swp.metadata.Resonator_Thickness =  200*1e-9 #list if more than one
+		swp.metadata.Resonator_Impedance = Z3_dict[sid]
+		swp.metadata.Resonator_Eeff = Eeff_dict[sid] # Resonator Dielectric Constant
+		swp.metadata.Through_Line_Impedance = Z1_dict[sid]
+		swp.metadata.Ground_Plane_Thickness = gp_thickness_dict[gid]*1e-9
+
+	_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+
+
+
+if 1:
+	database_location = 'Data/My_Data_Library.h5'
+	import KAM
+	reload(KAM)	
+	
+	
+	# swp.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
+	# swp.remove_cable_delay(Show_Plot = False, Verbose = False) 
+	# swp.circle_fit(Show_Plot = False) 
+	# swp.phase_fit(Fit_Method = 'Multiple',Verbose = True, Show_Plot = True)	
+	
+	index = 7
+	#swp     = KAM.sweep(); swp.load_hf5('/Run46a/T201402262113', filename = database_location); swp.metadata.width = 256
+	
+	#has an outlier curve - very nonlinear resonator
+	swp     = KAM.sweep(); swp.load_hf5('/Run45a/T201402061732', filename = database_location); swp.metadata.width =64; swp.metadata.custom = [True,'', '-']# to high power
+	
+	#this one is blurred by mirophonics
+	#swp     = KAM.sweep(); swp.load_hf5('/Run45b/T201402062055', filename = database_location); swp.metadata.width = 128;
+
+	#this one show very clear loop squashing
+	#swp    = KAM.sweep(); swp.load_hf5('/Run46a/T201402211440', filename = database_location); 
+
+	#52 sweeps - some very nonlinear
+	#swp     = KAM.sweep(); swp.load_hf5('/Run48a/T201403311119', filename = database_location); swp.metadata.width = 8;
+	
+
+	#run 51a survey -- index must be 0!
+	#swp    = KAM.sweep(); swp.load_hf5('/Run51a/T201411161833', filename = database_location); index = 0 
+
+	#run 52b survey -- index must be 0! (Low freq survey)
+	#swp    = KAM.sweep(); swp.load_hf5('/Run52b/T201503112206', filename = database_location); index = 0 
+
+	#run 52b survey -- index must be 0! (High freq survey)
+	#swp    = KAM.sweep(); swp.load_hf5('/Run52b/T201502262156', filename = database_location); index = 0
+
+	#false data /RunF1/T201505011200
+	#swp    = KAM.sweep(); swp.load_hf5('/RunF1/T201505011200', filename = database_location);
+
+	swp.pick_loop(index)
+	#swp.metadata.Electrical_Delay = None
+	#swp.remove_cable_delay(Show_Plot = False)#center_freq = 700e6)
+	#x = swp.nonlinear_fit()
+
+
+	# index = 143
+	# filename = path + 'Run48b/TP_Sweep/48b_ScanData_45mK_201441101927.mat'	
+	# swp.load_scandata(filename)
+	# swp.metadata.Sensor = 'S5 FHN1 (32um width)'
+	# _set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+	# swp.pick_loop(index)
+
+	# swp.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = True)
+	# swp.remove_cable_delay(Show_Plot = False, Verbose = False)
+	# swp.circle_fit(Show_Plot = False)
+	# swp.phase_fit()
+if 0:
+	database_location = 'Data/My_Data_Library.h5'
+	%pylab
+	%run -i  Gen_Data.py
+	swp.save_hf5( filename = database_location, overwrite = True)
+	index = 7
+
+	swp.pick_loop(index)
+	#x = swp.nonlinear_fit()
+if 0:
+	import KAM
+	reload(KAM)
+
+	from scipy.interpolate import interp1d
+
+	swp    = KAM.sweep(); swp.load_hf5('/Run51a/T201411161833', filename = database_location); index = 0
+	swp.pick_loop(index)
+	swp.remove_cable_delay()
+	swp.pick_loop(index)
+	tau = swp.metadata.Electrical_Delay #sec
+	tau_bandwidth = 1/tau #Hz - Estimate of winding bandwith using tau
+	center_freq = 700e6 #Hz
+
+	S21 = swp.loop.z
+	f = swp.loop.freq
+	closest_index_to_center_freq = np.where(np.abs(f-center_freq) == np.abs(f-center_freq).min()) 
+	S21 = S21*np.exp(np.complex(0,-np.angle(S21[closest_index_to_center_freq]))) #rotate circle so that S21[center_freq] is close to positive x axis, and angle(S21[center_freq]) ~ 0
+	
+	
+	condition = ((center_freq - .30*tau_bandwidth) < f) & (f<center_freq+.30*tau_bandwidth)
+	f_lower_band =np.extract(condition,f)
+	S21_lower_band = np.extract(condition,S21)
+	ang_lower_band = np.extract(condition,np.angle(S21)) #np.angle has range [+pi,-pi]
+	interp_lower_band = interp1d(ang_lower_band, f_lower_band,kind='linear')
+	lower_x_axis_crossing_freq = interp_lower_band(0).item()
+
+	center_freq = center_freq + tau_bandwidth #shift to upper band
+	condition = ((center_freq - .30*tau_bandwidth) < f) & (f<center_freq+.30*tau_bandwidth)
+	f_upper_band =np.extract(condition,f)
+	S21_upper_band = np.extract(condition,S21)
+	ang_upper_band = np.extract(condition,np.angle(S21)) #np.angle has range [+pi,-pi]
+	interp_upper_band = interp1d(ang_upper_band, f_upper_band,kind='linear')
+	upper_x_axis_crossing_freq = interp_upper_band(0).item()
+
+	winding_bandwidth = upper_x_axis_crossing_freq - lower_x_axis_crossing_freq
+
+	tau_winding = 1/winding_bandwidth
+
+	print tau_winding
+
+
+	fig = plt.figure( figsize=(5, 5), dpi=150)
+	ax = {}
+	ax[1] = fig.add_subplot(2,1,1)
+	ax[2] = fig.add_subplot(2,1,2, aspect = 'equal')
+	curve = ax[1].plot(f_lower_band,ang_lower_band, linestyle = '-')
+	curve = ax[1].plot(f_upper_band,ang_upper_band, linestyle = '-')
+	curve = ax[2].plot(S21_lower_band.real,S21_lower_band.imag, linestyle = '-')
+	curve = ax[2].plot(S21_upper_band.real,S21_upper_band.imag, linestyle = '-')
+	plt.show()

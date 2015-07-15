@@ -4,13 +4,14 @@ import urllib2
 import scipy.io #for loading .mat file
 import os
 import numpy as np
-
+import matplotlib.gridspec as gridspec
 
 import tables
 import matplotlib.pyplot as plt
 import datetime
-from scipy.optimize import minimize, leastsq# , root,newton_krylov, anderson
-
+from scipy.optimize import minimize, curve_fit, leastsq# , root,newton_krylov, anderson
+from scipy.interpolate import interp1d
+		
 import numpy.ma as ma
 import sys # for status percentage
 
@@ -61,7 +62,6 @@ class loop:
 		self.Q_est = None
 
 		#fit quantities
-		self.mask = None 
 		self.Q = None 
 		self.Qc = None
 		self.Qi = None
@@ -72,6 +72,8 @@ class loop:
 		self.pvalue = None
 		self.phase_fit_method = None
 		self.phase_fit_success = None
+		self.phase_fit_z = None
+		self.phase_fit_mask = None
 
 	def __del__(self):
 		pass
@@ -105,7 +107,7 @@ class metadata:
 		self.Resonator_Thickness = None #list if more than one
 		self.Resonator_Impedance = None
 		self.Resonator_Eeff = None # Resonator Dielectric Constant
-		self.Through_Line_Impedance = None
+		self.Feedline_Impedance = None
 		self.Fridge_Run_Start_Date = None
 		self.Fsteps  = None
 		#self.IS_Sonnet_Simulation = None
@@ -123,6 +125,7 @@ class metadata:
 		self.Temperature_Calibration = None # a list of tuples [(heatervoltge1, temperature), (heatervoltage2,temperature, ...)]
 		self.Num_Temperatures = None #number of temperature points taken after every scan for each heater voltage/power
 		self.Thermometer_Configuration = None
+		self.Electrical_Delay = None # Seconds
 
 
 class thermometry:
@@ -313,7 +316,7 @@ class sweep:
 		self.data = mat
 		self.metadata.Data_Source = URL
 
-	def plot_loop(self,  aspect='equal', show = True):
+	def plot_loop(self,  aspect='auto', show = True):
 		''' Plots currently selected complex transmission in the I,Q plane. Reutrns a tuple, (fig, ax, line),
 		where  fig is the figure object, ax is the axes object and line is the line object for the plotted data.
 
@@ -329,7 +332,7 @@ class sweep:
 
 
 		fig = plt.figure( figsize=(8, 6), dpi=100)
-		ax = fig.add_subplot(111)#,aspect=aspect)
+		ax = fig.add_subplot(111,aspect=aspect)
 		line = ax.plot(z.real,z.imag,'bo')
 		ax.set_xlabel('I [Volts]')
 		ax.set_ylabel('Q [Volts]')
@@ -426,13 +429,14 @@ class sweep:
 			("Thermometer_Voltage_Bias"	, np.float64), # in Volts
 			("Temperature_Readings"    	, np.float64,(tpoints,)), # in Kelvin
 			("Temperature"		    	, np.float64), # in Kelvin
-			("S21"            			, np.complex128, (fsteps,)), # in complex numbers
+			("S21"            			, np.complex128, (fsteps,)), # in complex numbers, experimental values.
 			("Frequencies"    			, np.float64,(fsteps,)), # in Hz
 			("Q"						, np.float64),
 			("Qc"						, np.float64),
 			("Fr"						, np.float64), # in Hz
 			("Is_Valid"					, np.bool),
 			("Mask"						, np.bool,(fsteps,)), # array mask selecting data used in phase fit
+			#("S21_Processed"            , np.complex128, (fsteps,)), # Processed S21 used in phase fit 
 			])
 
 	def _define_sweep_array(self,index,**field_names):
@@ -790,8 +794,6 @@ class sweep:
 	def decompress_gain(self, Compression_Calibration_Index = -1, Show_Plot = True, Verbose = True):
 		''' Assumes the two lowest input powers of the power sweep are not gain compressed, thus
 		cannot be used if the two lowest powers are gain compressed. '''
-		from scipy.interpolate import interp1d
-		from scipy.optimize import curve_fit
 		from matplotlib.ticker import MultipleLocator, FormatStrFormatter, MaxNLocator
 
 		Sweep_Array_Record_Index = self.loop.index 
@@ -818,11 +820,17 @@ class sweep:
 
 		Pout = compression_calibration_data*Pin
 
+		### TO BE DELETED
 		#calculated_power_gain is power gain calculated from the slope of the two smallest input powers in Pin
-		min_index = np.where(Pin == Pin.min())[0][0] # Index of the min values of Pin, unpacked from tuple
-		dif = Pin - Pin.min() 
-		min_plus = dif[np.nonzero(dif)].min() + Pin.min() # Second lowest value of Pin
-		min_plus_index = np.where(np.isclose(Pin,min_plus))[0][0] # index of the second lowest Pin value, unpacked from tuple
+		# min_index = np.where(Pin == Pin.min())[0][0] # Index of the min values of Pin, unpacked from tuple
+		# dif = Pin - Pin.min() 
+		# min_plus = dif[np.nonzero(dif)].min() + Pin.min() # Second lowest value of Pin
+		# min_plus_index = np.where(Pin == min_plus )[0][0] #  Index of second lowest Pin value - Previous command used to give min_index then Pin.min and min_plus  were really close : min_plus_index = np.where(np.isclose(Pin,min_plus))[0][0] # index of the second lowest Pin value, unpacked from tuple
+		###
+
+		# calculated_power_gain is power gain calculated from the slope of the two smallest input powers in Pin
+		values, indices = np.unique(Pin, return_index=True)
+		min_index,min_plus_index =  indices[:2]   
 		# When Pin = 0, 0 != Pout = Pin*gaain. There is an offset, i.e. a y-intercept, b, such at y = m*x+b. Next, we find m.  
 		calculated_power_gain = (Pout[min_plus_index] - Pout[min_index])/(Pin[min_plus_index ]-Pin[min_index]) 
 
@@ -989,70 +997,160 @@ class sweep:
 		self.loop.z = self.Sweep_Array[index]['S21']
 		self.loop.freq = self.Sweep_Array[index]['Frequencies']
 		
-	def remove_cable_delay(self, Show_Plot = True, Verbose = True):
+	def normalize_loop(self, base = 0, offset = 5):
+		''' normalize loop so that mag(S21)< 1. determine normalization by averaging np.abs(S21[base:offset]).mean()
+		return normalization'''
+		S21 = self.loop.z
+		f= self.loop.freq	
 		
+		normalization = np.abs(S21[base:offset]).mean() # consider using medium()?
+		S21_normalized = S21/normalization
+		self.loop.z = S21_normalized
+
+		return normalization 
+
+	def remove_cable_delay(self, Show_Plot = True, Verbose = True, center_freq = None, Force_Recalculate = False):
+		'''
+		If self.metadate.Electrical_Delay is not None, then use this value as cable delay and remove from data 
+
+		If self.metadate.Electrical_Delay is None:
+		- Determine cable delay by finding delay value, tau, which minimizes distance between adjacent S21 points. 
+		Then cancel out tau in S21 data and save corrected loop in self.loop.z. Set self.metadate.Electrical_Delay = tau.
+		- If S21 is large array, down sample it first before performing minimization
+
+		If self.metadate.Electrical_Delay is None and center_freq is given:
+		-If center_freq is given, this function computes the electrical delay by determining the bandwidth over which the S21 
+		circle completes a full revolution starting at center_freq and ending at ~ center_freq + tau^-1. Where tau is approximated
+		as the vaule deterined by minimum  distance above. 
+		-center_freq should only be used when S21 is is sufficiently broadband to generously cover center_freq and ~center_freq + tau^-1.
+		center_freq is in Hertz.
+
+		Return tau in any case.
+
+		If Force_Recalculate == False Electrical delay will be recalculated and reset in metadata
+		'''
 
 		S21 = self.loop.z
-		Freq = self.loop.freq
+		f= self.loop.freq
 
 		j = np.complex(0,1)
-		
+		n = 1
 
-		# 'base' and 'offset' determine the indices of S21 to use for minimization.
-		# Basically, we minimize the distance between complex vectors points S21[base] and S21[base + offset]
-		# rotation angle and rescaling factor computed from 'base'
-		base = 0
-		offset = -1
-		normalization = np.abs(S21[base:5]).mean()
-
-		def obj(t):
-			''' Build objective function to minimize
-			this function outputs the complex vector difference
-			cable_delay_term(base)S21(base) - cable_delay_term(base+offset)S21(base+offset)
-			'''
-			S21a = np.exp(2*np.pi*Freq[base]*j*t)*S21[base]
-			S21b = np.exp(2*np.pi*Freq[base+offset]*j*t)*S21[base+offset]
-			return np.abs(S21a-S21b)
-
-		cable_delay_guess = 100*10**-9 # Seconds
-		out = minimize(obj,cable_delay_guess, method='Nelder-Mead')
-		
-		cable_delay = out.x[0] # in seconds
-		#cable_delay = 80e-9
+		if (self.metadata.Electrical_Delay == None) or (Force_Recalculate == True):
+			cable_delay_max = 200e-9 # Seconds - guess as to maximum value of cable delay
+			cable_delay_guess  = 80e-9 # Seconds
+			freq_spacing = np.abs(f[0] - f[1])
+			# phase change between adjacent frequency points is 360 * tau * freq_spacing --> want tau * freq_spacing < 1 to see loop
+			if (3*freq_spacing * cable_delay_max < 1) & (f.size > 3200):
+				n1 = int(np.floor( 1./ (3*freq_spacing * cable_delay_max) )) #want as least 3 points per circle
+				n2 = int(np.floor(f.size/3200))
+				n = min(n1,n2)
 
 
-		# rotation angel to align circle with x-axis
-		angle = 0 # angle = 0 -- do not aligh with x-axis
-
-		rescale_factor = np.exp(j*-1*angle)/normalization 
-		#For Later: Need to make sure the noise in S21 (perhaps standard dev) is  much much less than distance between S21[base] and S21[base + offset]
-
-		S21_Corrected = rescale_factor*np.exp(2*np.pi*Freq*j*cable_delay)*S21
-
-		if Verbose == True:
-			print('cable delay is {} seconds'.format(cable_delay ))
-
-		if Show_Plot:
-			from matplotlib.ticker import MaxNLocator
-			fig1           = plt.figure(figsize = (6,6))
-			majormaxnlocator    = MaxNLocator(nbins = 5)
-			minormaxnlocator    = MaxNLocator(nbins = 5*5)
-			ax2 = fig1.add_subplot(111, aspect='equal')
-			line2 = ax2.plot(S21.real,S21.imag, color='blue', linestyle='solid', linewidth = 3, label = 'Measured') 
+			def obj(t):
+				'''This objective fuction yields the sum of squared distance between adjacent (if n = 1) or n-separated S21 points.
+				'''
+				
+				S21a = np.exp(2*np.pi*j*f[1::n]*t)*S21[1::n] # go in steps of n 
+				S21b = np.exp(2*np.pi*j*f[:-1:n]*t)*S21[:-1:n] # go in steps of n 
+				diff = S21a-S21b
+				return (diff*diff.conjugate()).real.sum()
 
 			
-			line1 = ax2.plot(S21_Corrected.real, S21_Corrected.imag, 'g-',linewidth = 3, label = 'Corrected')
-			ax2.grid()
-			ax2.set_title('Resonance Loop', fontsize=9)
-			plt.setp(ax2.get_xticklabels(),rotation = 45)
-			ax2.legend(loc = 'best')
 
-			fig1.subplots_adjust(wspace = 0.6,bottom = 0.09, top = 0.1)
-			#plt.tight_layout()
-			plt.setp(fig1, tight_layout = True)
+			# # Could use Nelder-Mead
+			# out = minimize(obj,cable_delay_guess, method='Nelder-Mead',tol=1e-20,options={'disp':False})
+			# cable_delay = out.x[0] # in seconds
+			
+			out = minimize(obj,cable_delay_guess, method='Powell',tol=1e-20,options={'disp':False, 'ftol':1e-14,'xtol':1e-14})
+			cable_delay_min_distance = out.x.item() #in Seconds 
+			cable_delay  = cable_delay_min_distance 
+
+			if center_freq is not None:
+				cable_delay_bandwidth = 1/cable_delay_min_distance #Hz - Estimate of winding bandwith using tau
+
+				closest_index_to_center_freq = np.where(np.abs(f-center_freq) == np.abs(f-center_freq).min()) 
+				s21 = S21*np.exp(np.complex(0,-np.angle(S21[closest_index_to_center_freq]))) #rotate circle so that S21[center_freq] is close to positive x axis, and angle(S21[center_freq]) ~ 0
+				
+				
+				condition = ((center_freq - .30*cable_delay_bandwidth) < f) & (f<center_freq+.30*cable_delay_bandwidth)
+				f_lower_band =np.extract(condition,f)
+				s21_lower_band = np.extract(condition,s21)
+				ang_lower_band = np.extract(condition,np.angle(s21)) #np.angle has range [+pi,-pi]
+				interp_lower_band = interp1d(ang_lower_band, f_lower_band,kind='linear')
+				lower_x_axis_crossing_freq = interp_lower_band(0).item()
+
+				center_freq = center_freq + cable_delay_bandwidth #shift to upper band
+				condition = ((center_freq - .30*cable_delay_bandwidth) < f) & (f<center_freq+.30*cable_delay_bandwidth)
+				f_upper_band =np.extract(condition,f)
+				s21_upper_band = np.extract(condition,s21)
+				ang_upper_band = np.extract(condition,np.angle(s21)) #np.angle has range [+pi,-pi]
+				interp_upper_band = interp1d(ang_upper_band, f_upper_band,kind='linear')
+				upper_x_axis_crossing_freq = interp_upper_band(0).item()
+
+				winding_bandwidth = upper_x_axis_crossing_freq - lower_x_axis_crossing_freq
+
+				cable_delay_winding = 1/winding_bandwidth
+				cable_delay = cable_delay_winding #override cable_delay_min_distance 
+		else:
+			cable_delay = self.metadata.Electrical_Delay
+			center_freq = None
+
+		S21_Corrected = np.exp(2*np.pi*f*j*cable_delay)*S21
+		
+		if Verbose == True:
+			if n>1:
+				print('S21 downsampled by factor n = {}.'.format(n))
+			if (self.metadata.Electrical_Delay == None) or (Force_Recalculate == True):
+				print('cable delay is {} seconds by minimum distance method'.format(cable_delay_min_distance))	
+			else: 
+				print('cable delay is {} seconds as found in metadata'.format(self.metadata.Electrical_Delay))
+			if center_freq is not None:
+				print('cable delay is {} seconds by loop winding method'.format(cable_delay_winding))
+			
+				
+		if Show_Plot:
+			fig = plt.figure( figsize=(9,6))#, dpi=150)
+			ax = {}	
+			def plot_loops(ax):
+				from matplotlib.ticker import MaxNLocator
+				majormaxnlocator    = MaxNLocator(nbins = 5)
+				minormaxnlocator    = MaxNLocator(nbins = 5*5)
+				#ax2 = fig.add_subplot(111, aspect='equal')
+				line2 = ax.plot(S21.real,S21.imag, color='blue', linestyle='solid', linewidth = 3, label = 'Measured') 
+				line1 = ax.plot(S21_Corrected.real, S21_Corrected.imag, 'g-',linewidth = 3, label = 'Corrected')
+				ax.grid()
+				ax.set_title('Resonance Loop', fontsize=9)
+				plt.setp(ax.get_xticklabels(),rotation = 45)
+				ax.legend(loc = 'best')
+
+			if center_freq is None:
+				gs = gridspec.GridSpec(1, 1)
+				ax[1] = plt.subplot(gs[0, 0],aspect='equal')
+				plot_loops(ax[1])
+
+			else:
+				gs = gridspec.GridSpec(2, 3)#,width_ratios=[2,2,1])
+
+				ax[1] = plt.subplot(gs[:,:2],aspect='equal')
+				ax[2] = plt.subplot(gs[0, 2])
+				ax[3] = plt.subplot(gs[1, 2], aspect='equal' )
+				plot_loops(ax[1])
+				curve = ax[2].plot(f_lower_band,ang_lower_band, linestyle = '-')
+				curve = ax[2].plot(f_upper_band,ang_upper_band, linestyle = '-')
+				curve = ax[3].plot(s21_lower_band.real,s21_lower_band.imag, linestyle = '-')
+				curve = ax[3].plot(s21_upper_band.real,s21_upper_band.imag, linestyle = '-')
+				plt.setp(ax[2].get_xticklabels(),rotation = 45)	
+				plt.setp(ax[3].get_xticklabels(),rotation = 45)				
+
+
+			#fig.subplots_adjust(wspace = 0.6,bottom = 0.09, top = 0.1)
+			#plt.setp(fig, tight_layout = True)
 			plt.show()
 
+		self.metadata.Electrical_Delay = cable_delay
 		self.loop.z = S21_Corrected
+		return cable_delay
 
 	def trim_loop(self,N = 20,Verbose = True,):
 		import numpy.ma as ma
@@ -1575,7 +1673,7 @@ class sweep:
 			r_fraction_in = r_fraction_in - 0.02
 			r_cutoff_in  = r_fraction_in*r
 			z = z3 = ma.masked_where((np.abs(z2)<r_cutoff_in) | (np.abs(z2)>r_cutoff_out),z2, copy = True)
-			#print 'loosening cut'
+			print 'loosening inner radius cut: r_fraction_in = {}'.format(r_fraction_in)
 			if r_fraction_in <= 0:
 				break
 		f = f3 = ma.array(f,mask = z.mask)
@@ -1665,6 +1763,7 @@ class sweep:
 		#p0 is the initial guess
 		p0 = np.array([theta_est,fr_est ,Q_est])
 		
+		#Each fit method is saved as a lambda function in a dictionary called fit_func
 		fit_func = {}
 		fit_func['Powell'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
 		fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
@@ -1674,7 +1773,7 @@ class sweep:
 		if isinstance(Fit_Method,set):      #All string inputs for Fit_Method were changed to sets at the begining of phase_fit
 		   if Fit_Method == {'Multiple'}:
 		      for method in fit_func.keys():
-		         fit[method] = fit_func[method]()
+		         fit[method] = fit_func[method]() # Execute the fit lambda function
 		   else:
 		      for method in Fit_Method:
 		         if method not in fit_func.keys():
@@ -1710,7 +1809,8 @@ class sweep:
 				bestfit = key
 		
 		self.loop.phase_fit_success = fit[bestfit].success
-		self.loop.mask = z5.mask
+		self.loop.phase_fit_z = z5.data
+		self.loop.phase_fit_mask = z5.mask
 		self.loop.phase_fit_method = bestfit
 		self.loop.Q = Q = fit[bestfit].x[2]
 		self.loop.Qc = Qc = Q/(2*r)
@@ -1878,6 +1978,9 @@ class sweep:
 				# Remove Gain Compression
 				self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
 
+				# Normalize Loop
+				self.normalize_loop()
+
 				# Remove Cable Delay
 				self.remove_cable_delay(Show_Plot = False, Verbose = False)	
 
@@ -1891,9 +1994,11 @@ class sweep:
 				self._define_sweep_array(index, Q = self.loop.Q,
 												Qc = self.loop.Qc,
 												Fr = self.loop.fr,
-												Mask = self.loop.mask)
+												Mask = self.loop.phase_fit_mask)
+												
 
-				if self.loop.phase_fit_success == False:
+				# Only execute if phase_fit_success is False to avoid setting Is_Valid true when it was previously set fulse for a different reason, e.g bad Temp data
+				if self.loop.phase_fit_success == False: 
 					self._define_sweep_array(index, Is_Valid = False)
 
 			if Compute_Preadout == True:
@@ -1980,427 +2085,436 @@ class sweep:
 			ax.legend(loc = 'best', fontsize=10,scatterpoints =1, numpoints = 1, labelspacing = .1)
 			plt.show()
 
-	# def _extract_wafer_label(self,string_input):
-	# 	'''returns first word in string for which all cased characters are upper case are AND for which the word is entirely 
-	# 	alpha numeric (no '-', '(', etc) AND for which word is >= 4 characters. returns warning if there are two matches or no matches.
-	# 	'''
-		
-	# 	matches = 0
-	# 	wafer_label = None
-	# 	split_string = string_input.replace('(','|').replace(')','|').replace(' ','|').split('|')[::-1] # reversed so that first occurance comes last
-	# 	for word in split_string:
-	# 		if word.isalnum() and word.isupper() and len(word) >= 4:
-	# 			wafer_label = word
-	# 			matches = matches + 1
-	# 	if matches > 1:
-	# 		warnings.warn('More than one wafer label found. Using first match.')
-	# 	if matches == 0:
-	# 		warnings.warn('No wafer label matches found. Returning None')
-
-	# 	return wafer_label
-
-	# def _extract_sensor_id(self):
-	# 	sensor = self.metadata.Sensor
-	# 	wafer_label  = self._extract_wafer_label(sensor)
-
-	# 	split_string  = sensor.replace(wafer_label ,'').split()
-	# 	matches = 0
-	# 	sensor_id = None
-	# 	for word in split_string:
-	# 		if word.isalnum() and word.isupper() and len(word) <= 4:
-	# 			sensor_id = word
-	# 			matches = matches + 1
-	# 	if matches > 1:
-	# 		warnings.warn('More than one sensor id found. Using first match.')
-	# 	if matches == 0:
-	# 		warnings.warn('No sensor id matches found. Returning None')
-
-	# 	return sensor_id
-
-		
-
-	# def _extract_width(self):
-	# 	''' extracts resonator width from self.metadata.Sensor, then sets self.metadata.Resonator_Width to this value and 
-	# 	returns value as well '''
-	# 	sensor = self.metadata.Sensor
-	# 	e = sensor.rfind('um')
-	# 	s = e - 1
-	# 	while True:
-	# 		if sensor[s-1].isdigit() is True:
-	# 			s = s -1;
-	# 		else:
-	# 			break
-	# 	width  = int(sensor[s:e])
-	# 	self.metadata.Resonator_Width = width
-	# 	return width
-
 	def nonlinear_fit(self, Fit_Method = 'Multiple', Verbose = True, Show_Plot = True):
 		from scipy.stats import chisquare
 		import time
 		
+		
 		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
 		   Fit_Method={Fit_Method}
 
-		def angle(z, deg = 0):
-			''' If z is a masked array. angle(z) returns the angle of the elements of z
-			within the branch [0,360] instead of [-180, 180], which is the branch used
-			in np.angle(). The mask of angle(z) is set to be the mask of the input, z.
-
-			If z is not a masked array, then angle(z) is the same as np.angle except 
-			that range is [0,360] instead of [-180, 180]
-
-			If z is a vector, then an angle shift is added to z  so the z[0] is 0 degrees
-			If z is a number, then dont shift angle'''
-			a = np.angle(z, deg = deg)
-			try:
-				a = a - a[0] #if a is not a vector, then a[0] will throw an error
-			except:
-				pass
-			p = np.where(a<=0,1,0)
-			n = 2
-			units = n*np.pi if deg == 0 else n*180
-			try:
-				a = ma.array(a + p*units,mask =z.mask) 
-			except:
-				a = a + p*units #if z is not a masked array do this
-			return a
 	
 		Sweep_Array_Record_Index = self.loop.index 
 		V = self.Sweep_Array['Heater_Voltage'][Sweep_Array_Record_Index]
 		Fs = self.Sweep_Array['Fstart'][Sweep_Array_Record_Index]
-		P = self.Sweep_Array['Pinput_dB'][Sweep_Array_Record_Index]
-
-		#Sweep_Array = np.extract((self.Sweep_Array['Heater_Voltage'] == V) & ( self.Sweep_Array['Fstart']==Fs) , self.Sweep_Array)
+		
+		#### NOTE:  will need to fix for the case of sweeps with  duplicate V .... will involve using np.unique
 		indices = np.where( (self.Sweep_Array['Heater_Voltage'] == V) & ( self.Sweep_Array['Fstart']==Fs))[0]
 		P_min_index = np.where( (self.Sweep_Array['Heater_Voltage'] == V) & ( self.Sweep_Array['Fstart']==Fs) & (self.Sweep_Array['Pinput_dB'] == self.Sweep_Array['Pinput_dB'].min()))[0][0]
-		#P_max_index = np.where( (self.Sweep_Array['Heater_Voltage'] == V) & ( self.Sweep_Array['Fstart']==Fs) & (self.Sweep_Array['Pinput_dB'] == self.Sweep_Array['Pinput_dB'].max()))[0][0]
-		
-		
-		#np.where( (swp.Sweep_Array['Heater_Voltage'] == V) & ( swp.Sweep_Array['Fstart']==Fs))
 
-		#### Fit lowest power loop to obtain extimate of Q, fr
-		self.pick_loop(P_min_index)
-		# Remove Gain Compression
-		self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
-		# Remove Cable Delay
-		self.remove_cable_delay(Show_Plot = False, Verbose = False)	
-		# Fit loop to circle
-		self.circle_fit(Show_Plot = False)
-		# Fit resonance parameters
-		self.phase_fit(Fit_Method = 'Multiple',Verbose = False, Show_Plot = False)
-
-		Q   = self.loop.Q 
-		Qc  = self.loop.Qc 
-		Qtl = self.loop.Qi 
-		f_0 = self.loop.fr 
-
-		widths = np.array([2,4,8,16,32,64,128,256])
-		Z3 = np.array([85.77,67.82,50.176,33.82,21.24,12.72,7.18,3.58])
-		Z3_dict = dict(zip(widths,Z3))
-		Z1 = np.array([52.10,52.10,52.10,52.10,52.10,52.10,52.10,52.10])
-		Z1_dict = dict(zip(widths,Z1))
-		Eeff = np.array([4.196,3.8148,3.2517,2.6174,2.09048,1.7018,1.4482,1.2773])
-		Eeff_dict = dict(zip(widths,Eeff))
+		##### Q, Qc, Qtl, fr  - used for initial guess in minimization
+		##### Zfl, Zres - used in minimization, Zfl converts power to voltage			
+		Q   = self.Sweep_Array['Q'][P_min_index]
+		Qc  = self.Sweep_Array['Qc'][P_min_index]
+		Qtl = np.power( (1./Q) - (1./Qc) , -1.)
+		fr = self.Sweep_Array['Fr'][P_min_index]
+		Zfl = self.metadata.Feedline_Impedance
+		Zres = self.metadata.Resonator_Impedance
 
 
-
-		def _extract_width():
-			''' extracts resonator width from self.metadata.Sensor, then sets self.metadata.Resonator_Width to this value and 
-			returns value as well '''
-			sensor = self.metadata.Sensor
-			e = sensor.rfind('um')
-			s = e - 1
-			while True:
-				if sensor[s-1].isdigit() is True:
-					s = s -1;
-				else:
-					break
-			width  = int(sensor[s:e])
-			self.metadata.Resonator_Width = width
-			return width
-
-		num_sweep_powers = indices.shape[0]	   
-		if num_sweep_powers <= 4:
-			print('Number of sweep powers, {0}, is insufficient to perform gain decompression.'.format(num_sweep_powers))
-			return
-		else:
-			print('Performing gain decompression on {0} sweep powers.'.format(num_sweep_powers))
-
-		#Pna= np.power(10, Sweep_Array['Pinput_dB']/10.0) #mW, Power out of NA
-		#min_index = np.where(Pna == Pna.min())[0][0] # Index of the min values of Pin, unpacked from tuple
-		
-		fig = plt.figure( figsize=(5, 5), dpi=150)
-		ax = {}
-		ax[1] = fig.add_subplot(2,1,1)
-		ax[2] = fig.add_subplot(2,1,2,aspect='equal')
-		
-		print indices
 		power_sweep_list = []
+		invalid_power_sweep_list = []
 		for index in indices: #
 			# Clear out loop
 			del(self.loop)
 			self.loop = loop()
 			
+			# Pick new loop
 			self.pick_loop(index)
-			Pna = 0.001*np.power(10, self.Sweep_Array['Preadout_dB'][index]/10.0) #W, Power out of NA
-			Z1 = Z1_dict[_extract_width()]
-			Z3 = Z3_dict[_extract_width()]
-			V1 = np.sqrt(Pna*2*Z1)
 
+	
 			# Remove Gain Compression
 			self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
+			# Normalize Loop
+			s21_mag = self.normalize_loop()
 			# Remove Cable Delay
 			self.remove_cable_delay(Show_Plot = False, Verbose = False)	
 			# Fit loop to circle
 			self.circle_fit(Show_Plot = False)
 
+			Preadout = 0.001*np.power(10, self.Sweep_Array['Preadout_dB'][index]/10.0) #W, Power out of NA
+			V1 = np.sqrt(Preadout*2*Zfl)
+			mask = self.Sweep_Array['Mask'][index]
+			f = ma.array(self.loop.freq,mask = mask)
+			z = ma.array(self.loop.z,mask = mask)
+			zc = np.complex(self.loop.a,self.loop.b)
+			z = z*np.exp(np.complex(0,-np.angle(zc)))
 
-			j = np.complex(0,1)
-
-			zc = self.loop.a + j*self.loop.b
-			r = self.loop.r
-
-			f = f0 = self.loop.freq
-			z = z0 = self.loop.z
-			
-
-			# Remove duplicate frequency elements in z and f, e.g. places where f[n] = f[n+1]
-			f_adjacent_distance = np.abs(f[:-1]-f[1:])
-			z = z1 = ma.masked_where(f_adjacent_distance==0.0, z[:-1],copy=True)
-			f = f1 = ma.array(f[:-1],mask = z.mask) #Syncronize mask of f to match mask of z
-
-
-			#Estimate Resonance frequency using minimum Dip or max adjacent distance
-			Use_Dip = 1 
-			if Use_Dip: #better for non-linear resonances with point near loop center
-				zr_mag_est = np.abs(z).min()
-				zr_est_index = np.where(np.abs(z)==zr_mag_est)[0][0]
+			if self.Sweep_Array['Is_Valid'][index] == True: 
+				power_sweep_list.append((V1,z.compressed(),f.compressed()))
 			else:
-				z_adjacent_distance = np.abs(z[:-1]-z[1:])
-				zr_est_index = np.argmax(z_adjacent_distance) 
-				zr_mag_est = np.abs(z[zr_est_index])
-
-
-			#Transmission magnitude off resonance 
-			Use_Fit = 1
-			if Use_Fit:
-				z_max_mag = np.abs(zc)+r
-			else: #suspected to be better for non-linear resonances
-				z_max_mag = np.abs(z).max()
-
-			#Depth of resonance in dB
-			depth_est = 20.0*np.log10(zr_mag_est/z_max_mag)
-
-			#Magnitude of resonance dip at half max
-			res_half_max_mag = (z_max_mag+zr_mag_est)/2
-
-			#find the indices of the closest points to this magnitude along the loop, one below zr_mag_est and one above zr_mag_est
-			a = np.square(np.abs(z[:zr_est_index+1]) - res_half_max_mag)
-			lower_index = np.argmin(a)
-			a = np.square(np.abs(z[zr_est_index:]) - res_half_max_mag)
-			upper_index = np.argmin(a) + zr_est_index
-
-			#estimate the FWHM bandwidth of the resonance
-			f_upper_FWHM = f[upper_index]
-			f_lower_FWHM = f[lower_index]
-			FWHM_est = np.abs(f_upper_FWHM - f_lower_FWHM)
-			fr_est = f[zr_est_index]
-			theta_est = angle(z[zr_est_index])
-			
-
-
-			#translate circle to origin, and rotate so that z[zr_est_index] has angle 0
-			z = z2 = ma.array((z.data-zc)*np.exp(-j*(angle(zc)-np.pi)), mask = z.mask)
-			
-			# #Compute theta_est before radious cut to prevent radius cut from removing z[f==fr_est]
-			# theta_est = angle(z[zr_est_index])	
-
-			#Radius Cut: remove points that occur within r_cutoff of the origin of the centered data. 
-			#(For non-linear resonances that have spurious point close to loop center)	
-			r_fraction = 0.75
-			r_cutoff_in  = r_fraction*r
-			r_cutoff_out = ((1-r_fraction) +1)*r
-			z = z3 = ma.masked_where((np.abs(z)<r_cutoff_in) | (np.abs(z)>r_cutoff_out),z,copy=True)
-			f = f3 = ma.array(f,mask = z.mask)
-
-
-			#Bandwidth Cut: cut data that is more than N * FWHM_est away from zr_mag_est
-			N = 10
-			z = z4 = ma.masked_where((f > fr_est + N*FWHM_est) | (fr_est - N*FWHM_est > f),z,copy=True)
-			f = f4 = ma.array(f,mask = z.mask)
-			z_theta = angle(z)
-
-
-			#Angle jump cut : masks points where angle jumps to next branch, +/- theta_cutoff
-			theta_cutoff = 345 #degrees
-			mask = (f > fr_est + 0.5*FWHM_est) | (f < fr_est + -0.5*FWHM_est)
-			f_in_FWHM = ma.masked_where(mask,f) # or alternatively: f_in_FWHM = f; f_in_FWHM[mask] = ma.masked 
-			edge1,edge2 = ma.flatnotmasked_edges(f_in_FWHM)
-			angle_slope = (z_theta[edge2]-z_theta[edge1])/(f[edge2]-f[edge1]) # angle is decreasing if negative slope
-			upper_cond = ((f > fr_est +  0.5*FWHM_est) & ((z_theta[edge2]<z_theta) if (angle_slope<0) else (z_theta[edge2]>z_theta))) 
-			lower_cond = ((f < fr_est + -0.5*FWHM_est) & ((z_theta[edge1]>z_theta) if (angle_slope<0) else (z_theta[edge1]<z_theta))) 
-			z = z5 = ma.masked_where(lower_cond|upper_cond,z,copy=True)
-			f = f5 = ma.array(f,mask = z.mask)
-			# z_theta = z_theta5 = ma.array(z_theta,mask = z.mask)		
-
-			#translate circle to origin, and rotate so that z[zr_est_index] has angle 0
-			z = z6 = ma.array(np.abs(zc)+z.data*np.exp(j*(-np.pi)), mask = z.mask)
-			f = f6 = ma.array(f,mask = z.mask)
-
-			###PLot Mask Data
-			#dff = (f0- f_0)/f_0
-			#curve =ax[1].plot(dff[~z6.mask],np.ma.abs(z0)[~z6.mask])
-			#curve = ax[2].plot(z6.real[~z6.mask],z6.imag[~z6.mask]) 
-
-			###PLot Compressed Data
-			dff = (f6.compressed()- f_0)/f_0
-			curve =ax[1].plot(dff,np.ma.abs(z6.compressed()))
-			curve = ax[2].plot(z6.compressed().real,z6.compressed().imag) 
-			#curve = ax[2].plot(z6.compressed()[0:10].real,z6.compressed()[0:10].imag,'k*') 
-			power_sweep_list.append((V1,z6.compressed(),f6.compressed(),Z1, Z3))
-			print(V1)
-			#power_sweep_list.append((V1,z6,f6,Z1, Z3))
+				invalid_power_sweep_list.append((V1,z.compressed(),f.compressed()))
 
 		
-		print len(power_sweep_list)
-
-		#ax[1].ticklabel_format(axis='x', style='sci',scilimits = (0,0), useOffset=True)	
+		
 		def progress(x):
-			print x
-
-
-
-
-
-		V30V30 = 1e-4 #Q # Brings quantities in the minmization to O(1)
-		def obj(p):
-			f_0,Qtl,Qc,phi31,eta,delta,g,a,b,phi,tau = p
+			''' Add a dot to stdout at the end of each iteration without removing the dot from the previous iteration or 
+			adding a new line.
+			'''
+			sys.stdout.write('.')
+			sys.stdout.flush()
 			
-			#residual = np.array([])
+
+		V30V30 = fr #minimization will not converge if V30V30 is too small
+		phiV1 = 0.0
+		def obj(p):
+			''' Objective function to be minimized
+			'''
+			parameter_dict = {'f_0':p[0], 'Qtl':p[1], 'Qc':p[2], 'phi31':p[3], 'eta':p[4], 'delta':p[5], 'Zfl':Zfl, 'Zres':Zres,  'phiV1':phiV1, 'V30V30':V30V30} 
+			fd = self._nonlinear_formulae( parameter_dict, model = 2) # get the nonlinear formulae dict, fd 
+			a,b,phi,tau = p[6:]
+			
 			sumsq = 0
 			for sweep in power_sweep_list:
-				V1e, S21e, f, Z1, Z3 = sweep #V1e, S21e -- experimental values of these quantities
-				V1  = g*V1e
-
-				#S21 = np.complex(a,b)+ np.exp(np.complex(0,phi))*S21e*V1e/V1 
-				S21 = np.complex(a,b)+ np.exp(np.complex(0,phi)+ np.complex(0,2.0*np.pi*tau)*f)*S21e
-				V3  = (S21 + (np.exp(np.complex(0,2.0*phi31)) - 1.0)/2.0 )*V1*np.exp(np.complex(0,-1.0*phi31))*np.sqrt(Z3*Qc/(Z1*np.pi))
-				v1 = V3*V3.conjugate()
-
-				#Now we use |V3V3|^2 = v1 to calculate the other two roots of the cubic, v2 and v3
-				z1 = eta/(Qtl*V30V30)+ np.complex(0,1.0)*(2*delta*f)/(V30V30*f_0)
-				z2 = (1.0/Qc) + (1/Qtl) + np.complex(0,2.0) *(f-f_0)/f_0
-				z1z2c = z1*z2.conjugate()
-				z1z1 = z1*z1.conjugate()
-				z2z2 = z2*z2.conjugate()
-				#v1 = V3__*V3__.conjugate()
-				term1 = -(z1z2c.real/z1z1) - v1/2.0
-				term2 = np.complex(0,1)*np.sqrt(4*z1z2c.imag*z1z2c.imag + 3*v1*v1*z1z1*z1z1 + 4*z1z1*z1z2c.real*v1)/(2*z1z1)
-				v2  = term1 + term2
-				v3  = term1 - term2
-
-				V3p = np.sqrt(v2)
-				V3m = np.sqrt(v3)
-
-
-
-				# _equality =  ((eta/Qtl) + np.complex(0,2.0*delta)*(f/f_0))*np.square(np.abs(V3))*V3 + V3*(V30V30/Qc) + V3*(V30V30/Qtl) + V3*np.complex(0,2.0*V30V30)*(f-f_0)/f_0
-				# equality_ = np.sqrt(Z3/(np.pi*Qc*Z1))*np.exp(np.complex(0,phi31))*V30V30*V1
-				# residual  = _equality - equality_
-				# sumsq = np.square(np.abs(residual)).sum()  + sumsq				
-
+				V1e, S21e, f = sweep #V1e, S21e -- experimental values of these quantities
+				V1  = V1e
 				
-				s21 = ((1-np.exp(np.complex(0,2.0)*phi31))/2 +( (1/Qc) / ((1/Qc) + (1/Qtl)*(1+eta*v1/V30V30) + np.complex(0,2)* (((f-f_0)/f_0) + delta*(v1/V30V30)*(f/f_0))))*np.exp(np.complex(0,2.0)*phi31))
+				# Impose geometrical transformations to S21
+				S21 = np.complex(a,b)+ np.exp(np.complex(0,phi)+ np.complex(0,2.0*np.pi*tau)*f)*S21e
+				
+				V3 = fd['V3'](S21,V1)
+				v1 = V3*V3.conjugate()
+				s21 = fd['S21'](v1,f)
+
+				##### Old way by means of direct calculations rather then centralized nonlinear funct dict  - Probably faster
+				#V3  = (S21 + (np.exp(np.complex(0,2.0*phi31)) - 1.0)/2.0 )*V1*np.exp(np.complex(0,-1.0*phi31))*np.sqrt(Z3*Qc/(Z1*np.pi))
+				#v1 = V3*V3.conjugate()		
+				#s21 = ((1-np.exp(np.complex(0,2.0)*phi31))/2 +( (1/Qc) / ((1/Qc) + (1/Qtl)*(1+eta*v1/V30V30) + np.complex(0,2)* (((f-f_0)/f_0) + delta*(v1/V30V30)*(f/f_0))))*np.exp(np.complex(0,2.0)*phi31))
 				diff = S21 - s21
-				# #diff = v3*v2+v3*v1+v1*v2 - z2z2/z1z1
-				# #diff = v3*v3*v3 + v2*v2*v2 + v1*v1*v1 - 
-				# #diff = v3*v2*v1 - V1*V1.conjugate()*Z3/(Qc*Z1*z1z1)
-				# #diff = (v3 + v1 + v2) -  2*z1z2c.real/z1z1
 				sumsq = (diff*diff.conjugate()).real.sum()  + sumsq
-				# #sumsq = diff.sum()  + sumsq
-				#sumsq = (diff*diff.conjugate()).real.sum()
-				#residual  = np.hstack((residual,sumsq))
 			return sumsq
-			#return residual
-
-
+			
+	
 		phi31_est = np.pi/2
 		eta_est = 0.001
 		delta_est = 0.001
-		g_est = 1.0
 		a_est = 0.
 		b_est = 0.
-		
 		phi_est = 0.
 		tau_est = 0.0
-		p0 = np.array([f_0,Qtl,Qc,phi31_est,eta_est,delta_est,g_est,a_est,b_est, phi_est,tau_est ])
+		p0 = np.array([fr,Qtl,Qc,phi31_est,eta_est,delta_est,a_est,b_est, phi_est,tau_est ])
+		#Each fit method is saved as a lambda function in a dictionary called fit_func
+		fit_func = {}
+		fit_func['Powell'] = lambda : minimize(obj, p0, method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=None, tol=1e-20, callback=progress, options={'disp':False, 'maxiter': 70, 'maxfev': 50000, 'ftol':1e-14,'xtol':1e-14}) #maxfev: 11137 defaults: xtol=1e-4, ftol=1e-4,
+		#fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
+		#fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
 
 
-
-
+		fit = {}
 		start = time.time()
-		#x = minimize(obj, p0, method='L-BFGS-B', jac=None, hess=None, hessp=None, bounds=((300e6,3e9),(20e3,2e6),(10e3,800e3),(0, 3.142), (None,None), (None,None),(0.1,8), (None,None),(None,None), (0,6.284)), constraints=(), tol=1e-19, callback=None, options={'disp':True})		
-		#x = newton_krylov(obj, p0, method='gmres', verbose=1, callback=progress)
-		#x = anderson(obj, p0, verbose=1, callback=progress)
-		#x = root(obj, p0, callback=progress)
-		x = minimize(obj, p0, method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=None, tol=1e-20, callback=progress, options={'disp':True, 'maxiter': 70, 'maxfev': 50000, 'ftol':1e-14,'xtol':1e-14}) #maxfev: 11137 defaults: xtol=1e-4, ftol=1e-4,
-		#x = minimize(obj, p0, method='CG', jac=None, hess=None, hessp=None, bounds=None, constraints=None, tol=1e-20, callback=progress, options={'disp':True, 'maxiter': 70, 'maxfev': 50000, 'ftol':1e-14,'xtol':1e-14}) #maxfev: 11137 defaults: xtol=1e-4, ftol=1e-4,
+	
+		for method in fit_func.keys():
+			sys.stdout.write('Iterating')
+			sys.stdout.flush()
+			fit[method] = fit_func[method]()
 		
 		finished = time.time()
 		elapsed = (finished - start )/60.0 #minutes
 		print 'Minimization took {} minutes'.format(elapsed)
-		print x
-		print p0
+		
 
-		if x.success == True:
-			f_00 = f_0 # this is the res freq of the lowest power resonator estimated from phase fit 
-			f_0,Qtl,Qc,phi31,eta,delta,g, a,b, phi,tau = x.x
-			vline = ax[1].axvline(x = (f_0-f_00)/f_00,linewidth=1, color='y', linestyle = ':',   label = r'$f_{r}$')
-			
+		if fit.keys() != []: #if there is a fit object in the fit dictionary
+			bestfit = list(fit)[0]
+			lowest = fit[bestfit].fun # .fun is function value
+			for key in fit.keys(): 
+				if fit[key].fun < lowest:
+					lowest = fit[key].fun
+					bestfit = key
+		else:
+			bestfit = None
+
+		if Verbose == True:
+			print fit[bestfit]
+		
+		if Show_Plot == True:
+			#Determine Sweep Direction
+			direction = 'up'
+			if direction == 'up':
+				#min |--> up sweep (like at UCB)
+				extreme = np.min 
+			else:
+				# max |--> down sweep
+				extreme = np.max
+
+			####### Set up plot objects
+			fig = plt.figure( figsize=(5, 5), dpi=150)
+			ax = {}
+			gs = gridspec.GridSpec(2, 2)
+			ax[1] = plt.subplot(gs[0, :])
+			ax[2] = plt.subplot(gs[1, 0], aspect='equal' )
+			ax[3] = plt.subplot(gs[1, 1])
+			note = (r'Run {run}, Resonator width {width:.0f} $\mu m$'+'\n').format(run = self.metadata.Run, 
+				width = (self.metadata.Resonator_Width if self.metadata.Resonator_Width is not None else 0)/1e-6)
+
+			if bestfit != None:
+				p = fit[bestfit].x
+				parameter_dict = {'f_0':p[0], 'Qtl':p[1], 'Qc':p[2], 'phi31':p[3], 'eta':p[4], 'delta':p[5], 'Zfl':Zfl, 'Zres':Zres,  'phiV1':phiV1, 'V30V30':V30V30}
+				fd = self._nonlinear_formulae( parameter_dict, model = 2) # get the nonlinear formulae dict, fd 
+				a,b,phi,tau = p[6:]
+				vline = ax[1].axvline(x = (parameter_dict['f_0']-fr)/fr,linewidth=1, color='y', linestyle = ':')#,   label = r'$f_{r}$')
+				note = note + (r'$f_0$ = {f_0:3.2e} Hz, $Q_{sub1}$ = {Qtl:3.2e}, $Q_c$ = {Qc:3.2e}' +
+					'\n' + r'$\phi_{sub2}$ = {ang:3.2f} deg, ${l1}$ = {et:3.2e}, ${l2}$ = {de:3.2e}').format(
+					nl = '\n', et = parameter_dict['eta']/parameter_dict['V30V30'],
+					de = parameter_dict['delta']/parameter_dict['V30V30'], 
+					l1 = r'{\eta}/{V_{3,0}^2}',
+					l2  = r'{\delta}/{V_{3,0}^2}',
+					ang = parameter_dict['phi31']*180/np.pi, 
+					sub1 = '{tl}', sub2 = '{31}',**parameter_dict)
+						
+
 			for sweep in power_sweep_list:
-				V1, S21, f, Z1, Z3 = sweep			
-				V1 = g*V1
-				V1V1 = np.square(V1)
-				#print V1
-				V3V3 = np.empty(f.shape)
+				V1exp, S21exp, f = sweep
+				Pexp = 10*np.log10(V1exp*V1exp/(2 *Zfl*0.001))
+				dff = (f - fr)/fr
+				curve = ax[1].plot(dff,10*np.log10(np.abs(S21exp)),label = '{:3.0f} dBm'.format(Pexp))
+				curve = ax[2].plot(S21exp.real,S21exp.imag)
+
+					
+				if bestfit != None:
+					#####Compute the experimental values of V3
+					V3_exp = fd['V3'](S21exp,V1exp)
+
+					#####Initialize arrays
+					Number_of_Roots = 3
+					V3V3 = np.ma.empty((f.shape[0],Number_of_Roots), dtype = np.complex128)
+					V3V3_cubic = np.empty(f.shape)
+					V3_cubic = np.empty(f.shape)
+					S21_fit = np.empty_like(f,dtype = np.complex128)
+					V3_fit = np.empty_like(f,dtype = np.complex128)
+
+					for n in xrange(f.shape[0]):
+						coefs = np.array([fd['z1z1'](f[n]), 2*fd['rez1z2c'](f[n]), fd['z2z2'](f[n]), -fd['z3z3'](V1exp)])
+						V3V3[n] =np.ma.array(np.roots(coefs),mask= np.iscomplex(np.roots(coefs)),fill_value = 1)
+						V3V3_cubic[n]    = extreme(np.extract(~V3V3[n].mask,V3V3[n])).real
+						V3_cubic[n]    = np.sqrt(V3V3_cubic[n])
+						# S21_fit is adjused to take into accout fit parameters a,b,phi,tau 
+						S21_fit[n]  = (fd['S21'](V3V3_cubic[n],f[n]) - np.complex(a,b))*np.exp(np.complex(0,-phi)+ np.complex(0,-tau*2.0*np.pi)*f[n])
+						# Note that V3_fit has the effect of a,b,phi,tau incorporated,  
+						# So it should no be expected to equal V3_cubic
+						V3_fit[n] = fd['V3'](S21_fit[n],V1exp)
+
+					S21_cor = np.complex(a,b)+ np.exp(np.complex(0,phi)+ np.complex(0,2.0*np.pi*tau)*f)*S21exp
+					V3_cor  = fd['V3'](S21_cor,V1exp)
+
+					curve = ax[1].plot(dff,10*np.log10(np.abs(S21_fit)), linestyle = ':', color = 'c')
+					curve = ax[2].plot(S21_fit.real,S21_fit.imag, linestyle = ':', color = 'c') 
+					
+					# curve = ax[3].plot(dff.real,V3_cor.real)
+					# curve = ax[3].plot(dff.real,V3_cubic.real, linestyle = ':', color = 'g')
+					
+
+					curve = ax[3].plot(dff,V3_exp.real)
+					curve = ax[3].plot(dff.real,V3_fit.real, linestyle = ':', color = 'c')#~np.iscomplex(V3fit)
+					
+
 				
-				V3 = np.empty_like(f)
-				V2_out = np.empty_like(f,dtype = np.complex256)
-				for n in xrange(f.shape[0]):
-					coefs    = np.array([np.square(delta * f[n]/V30V30 )+ np.square(eta*f_0/(2*Qtl*V30V30)), 2*(delta*(f[n]-f_0)*f[n]/V30V30 + (eta*f_0*f_0/(4*Qtl*V30V30))*((1/Qc) + (1/Qtl)) ),np.square(f[n]-f_0) +  np.square((f_0/(2*Qtl)) + (f_0/(2*Qc)) ),  -1.0*f_0*f_0*Z3*V1V1/(4*np.pi*Qc*Z1)])
-					roots    = np.roots(coefs)
-					V3V3[n]  = np.extract(~np.iscomplex(roots),roots).min().real #Returns the Maximum of the Real Roots. This is the upsweep value.
-					#V3[n]    = np.sqrt(V3V3[n])
-					V2_out[n] = V1*((1-np.exp(np.complex(0,2.0)*phi31))/2 +( (1/Qc) / ((1/Qc) + (1/Qtl)*(1+eta*V3V3[n]/V30V30) + np.complex(0,2)* (((f[n]-f_0)/f_0) + delta*(V3V3[n]/V30V30)*(f[n]/f_0))))*np.exp(np.complex(0,2.0)*phi31))
+			ax[1].set_title('Mag Transmission')
+			ax[1].set_xlabel(r'$\delta f_0 / f_0$', color='k')
+			ax[1].set_ylabel(r'|$S_{21}$| [dB]', color='k')
+			ax[1].yaxis.labelpad = -4
+			ax[1].ticklabel_format(axis='x', style='sci',scilimits = (0,0), useOffset=True)
+			ax[1].text(0.01, 0.01, note,
+				verticalalignment='bottom', horizontalalignment='left',
+				transform=ax[1].transAxes,
+				color='black', fontsize=4)
+			ax[1].legend(loc = 'right', fontsize=4,scatterpoints =1, numpoints = 1, labelspacing = .1)
+
+			ax[2].set_title('Resonance Loop')
+			ax[2].set_xlabel(r'$\Re$[$S_{21}$]', color='k')
+			ax[2].set_ylabel(r'$\Im$[$S_{21}$]', color='k')
+			ax[2].yaxis.labelpad = -8
+			ax[2].ticklabel_format(axis='x', style='sci',scilimits = (0,0),useOffset=False)
+
+			ax[3].set_title('Resonator Amplitude')
+			ax[3].set_xlabel(r'$\delta f_0 / f_0$', color='k')
+			ax[3].ticklabel_format(axis='x', style='sci',scilimits = (0,0),useOffset=False)
+
+			for k in ax.keys():
+				ax[k].tick_params(axis='y', labelsize=6)
+				ax[k].tick_params(axis='x', labelsize=6)
+
+			plt.subplots_adjust(left=.1, bottom=.1, right=None, top=.9 ,wspace=.35, hspace=.3)
+			plt.suptitle('Fit to Nonlinear Resonator Data', fontweight='bold')
+			fig.savefig('Plot',dpi=300, transparency  = True)
+			plt.show()
+ 
+
+
+		return fit
+
+	def _nonlinear_formulae(self, parameter_dict, model = 2):
+		''' model 2 is paramterization based on input resonator amplitude V_3^-, e.g.: 
+		parameter_dict = {'f_0':700e6, 'Qtl':300e3, 'Qc':80e3, 'eta':1e-1, 'delta':1e-6, 'Zfl':30, 'Zres':50, 'phi31': np.pi/2.03, 'phiV1':np.pi/10, 'V30V30':}
+		'''
+		d = parameter_dict
+		k = {	'z1'     :  lambda f      : d['eta']/(d['Qtl']*d['V30V30']) + np.complex(0,1.0)*(2*d['delta']*f)/(d['V30V30']*d['f_0']),
+				'z2'     :  lambda f      : (1.0/d['Qc']) + (1.0/d['Qtl']) + np.complex(0,2.0) *(f-d['f_0'])/d['f_0'],
+				'z3'     :  lambda V1     : np.sqrt(d['Zres']/(np.pi * d['Qc'] *d['Zfl'])) * np.exp(np.complex(0,d['phi31'])) * V1 *  np.exp(np.complex(0,d['phiV1'])),
+				'z1z1'   :  lambda f      : (k['z1'](f) * k['z1'](f).conjugate()).real,
+				'z2z2'   :  lambda f      : (k['z2'](f) * k['z2'](f).conjugate()).real,
+				'z3z3'   :  lambda V1     : (k['z3'](V1) * k['z3'](V1).conjugate()).real,
+				'rez1z2c':  lambda f      : (k['z1'](f) * k['z2'](f).conjugate()).real,
+				'imz1z2c':  lambda f      : (k['z1'](f) * k['z2'](f).conjugate()).imag,
+				#'V3'     :  lambda S21,V1 : (S21 + (np.exp(np.complex(0,2.0*d['phi31'])) - 1.0)/2.0 )*V1*np.exp(np.complex(0,-1.0*d['phi31']))*np.sqrt(d['Zres']*d['Qc']/(d['Zfl']*np.pi)), # may have less rounding error 
+				'V3'     :  lambda S21,V1 : (S21 + (np.exp(np.complex(0,2.0*d['phi31'])) - 1.0)/2.0 )*k['z3'](V1)*d['Qc']*np.exp(np.complex(0,-2.0*d['phi31'])),
+				'S21'    :  lambda V3V3,f : ((1-np.exp(np.complex(0,2.0)*d['phi31']))/2 +( (1.0/d['Qc']) / (k['z2'](f) + k['z1'](f)*V3V3))*np.exp(np.complex(0,2.0)*d['phi31']))
+			}
+				#						   V3  = (S21 + (np.exp(np.complex(0,2.0*phi31)) - 1.0)/2.0 )*V1*np.exp(np.complex(0,-1.0*phi31))*np.sqrt(Z3*Qc/(Z1*np.pi))
+				# #Now we use |V3V3|^2 = v1 to calculate the other two roots of the cubic, v2 and v3
+				# v1 = V3*V3.conjugate()
+				# term1 = -(z1z2c.real/z1z1) - v1/2.0
+				# term2 = np.complex(0,1)*np.sqrt(4*z1z2c.imag*z1z2c.imag + 3*v1*v1*z1z1*z1z1 + 4*z1z1*z1z2c.real*v1)/(2*z1z1)
+				# v2  = term1 + term2
+				# v3  = term1 - term2
+
+				# V3p = np.sqrt(v2)
+				# V3m = np.sqrt(v3)
+
+				# Note: Ztl can be removed from the calculation. In which case we use Pfl, (i.e. Vfl = sqrt(Pfl*Zfl*2)) 
+
+		return k
+
+	def generate_nonlinear_data(self,  Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None,
+		curve_parameter_dict = {'f_0':700e6, 'Qtl':300e3, 'Qc':80e3, 'eta':1e-1, 'delta':1e-6, 'Zfl':30, 'Zres':50, 'phi31': np.pi/2.03, 'phiV1':np.pi/10, 'V30V30':0.01},
+		sweep_parameter_dict = {'Run': 'F1', 'Pprobe_dBm_Start' :-65.0,'Pprobe_dBm_Stop': -25.0, 'Pprobe_Num_Points':10, 'numBW':24,'num': 1000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'}):
+		'''Creates and Loads  Data
+		eta Q nonlinearity
+		delta freq nonlinearity		
+		'''
+		cd = curve_parameter_dict
+		sd = sweep_parameter_dict
+
+
+		#delete previous metadata object
+		del(self.metadata)
+		self.metadata = metadata()
+		del(self.loop)
+		self.loop = loop()
+
+		default_index = 0
+		self.metadata.Electrical_Delay = 0.0
+		self.metadata.Feedline_Impedance = cd['Zfl']
+		self.metadata.Resonator_Impedance = cd['Zres']
+		self.metadata.Time_Created =     '05/01/2015 12:00:00' # or the current datetime datetime.datetime.now().strftime('%m/%d/%Y %H:%M:%S')
+		self.metadata.Run = sd['Run']
+		self.pick_loop(default_index)
+
+
+		Q = 1.0/ ((1.0/cd['Qtl']) + (1.0/cd['Qc']))
+
+
+		############################## Make Pprobe Array
+		Pprobe_dBm = np.linspace(sd['Pprobe_dBm_Start'],sd['Pprobe_dBm_Stop'], sd['Pprobe_Num_Points'])
+		Pprobe = 0.001* np.power(10.0,Pprobe_dBm/10.0)
+		V1V1 = Pprobe *2*cd['Zfl']
+		V1 = np.sqrt(V1V1) * np.exp(np.complex(0,1)*cd['phiV1'])
+
+
+		################################# Create f array making sure it contains f_0
+		BW = sd['numBW']*cd['f_0']/Q 
+
+		if sd['Freq_Spacing'].lower() == 'triangular': #Triangular numbers - Denser around f_0
+			T = np.linspace(1, sd['num'],  num=sd['num'], endpoint=True, retstep=False, dtype=None)
+			T = T*(T+1.0)/2.0
+			f_plus = (T*(BW/2)/T[-1]) + cd['f_0']
+			f_minus = (-T[::-1]/T[-1])*(BW/2) + cd['f_0']
+			f = np.hstack((f_minus,cd['f_0'],f_plus))
+
+		if sd['Freq_Spacing'].lower() == 'linear': #linear
+			f_plus = np.linspace(cd['f_0'], cd['f_0'] + BW/2,  num=sd['num'], endpoint=True, retstep=False, dtype=None)
+			f_minus = np.linspace(cd['f_0']- BW/2,cd['f_0'],   num=sd['num']-1, endpoint=False, retstep=False, dtype=None)
+			f = np.hstack((f_minus,f_plus))
+
+
+		if sd['Freq_Spacing'].lower() == 'log': #logerithmic - Denser around f_0, for wide band sweeps
+			f_plus = np.logspace(np.log10(cd['f_0']), np.log10(cd['f_0'] + BW/2),  num=sd['num'], endpoint=True, dtype=None)
+			f_minus = -f_plus[:0:-1] + 2*cd['f_0']
+			f = np.hstack((f_minus,f_plus))
+		
+
+		#################### Initialize Arrays
+		Number_of_Roots = 3
+		V3V3 = np.ma.empty((f.shape[0],Number_of_Roots), dtype = np.complex128)
+
+		V3V3_direction = np.empty(f.shape)
+		S21_direction = np.empty_like(f,dtype = np.complex128)
+		
+
+
+		#################### Initialize and Consigure self.Sweep_Array
+		tpoints = 0
+		self._define_sweep_data_columns(f.size,tpoints)
+		self.Sweep_Array = np.zeros(Pprobe_dBm.size, dtype = self.sweep_data_columns) #Sweep_Array holdes all sweep data. Its length is the number of sweeps
+
+
+		fig = plt.figure( figsize=(5, 5), dpi=150)
+		ax = {}
+		ax[1] = fig.add_subplot(1,1,1)
+		dff = (f - cd['f_0'])/cd['f_0']
+
+		system_attenuation_before_device = 50 # dB,  Difference between Preadout and Pinput
+		
+		#Determine Sweep Direction
+		if sd['Up_or_Down'].lower() == 'up':
+			#min |--> up sweep (like at UCB)
+			extreme = np.min 	
+		else:
+			# max |--> down sweep
+			extreme = np.max
+
+
+		print 'Generating False Data...'
+		for index in xrange(Pprobe_dBm.size):
+			sys.stdout.write('\r {0} of {1} '.format(index+1, Pprobe_dBm.size))
+			sys.stdout.flush()
+			Phase_Noise = np.zeros_like(f.shape) if Phase_Noise_Variance is None else np.random.normal(scale = np.sqrt(Phase_Noise_Variance), size=f.shape)
+			Amplitude_Noise = np.zeros_like(f.shape) if Amplitude_Noise_Variance is None else np.random.normal(scale = np.sqrt(Amplitude_Noise_Variance), size=f.shape)
+
+			for n in xrange(f.shape[0]):
+				#################### Solve for Resonator amplitude using formulae from 
+				fd = self._nonlinear_formulae(cd, model = 2) #get the nonlinear formulae dict, fd
+				coefs = np.array([fd['z1z1'](f[n]), 2*fd['rez1z2c'](f[n]), fd['z2z2'](f[n]), -fd['z3z3'](V1[index])])
+
+
+				V3V3[n] =np.ma.array(np.roots(coefs),mask= np.iscomplex(np.roots(coefs)),fill_value = 1)
+				V3V3_direction[n]    = extreme(np.extract(~V3V3[n].mask,V3V3[n])).real
+				S21_direction[n]  = fd['S21'](V3V3_direction[n],f[n])
+
+			S21 = S21_direction + Amplitude_Noise + np.complex(0,1)*Phase_Noise
 			
-				dff = (f- f_00)/f_00
-				#S21fit = ((V2_out  - np.complex(a,b))/V1 )*np.exp(np.complex(0,-phi)) 
-				S21fit = ((V2_out/V1) - np.complex(a,b))*np.exp(np.complex(0,-phi)+ np.complex(0,-tau*2.0*np.pi)*f) 
-				curve =ax[1].plot(dff,np.abs(S21fit), linestyle = ':', color = 'c')
-				curve = ax[2].plot(S21fit.real,S21fit.imag, linestyle = ':', color = 'c') 
+			####################  Fill self.Sweep_Array
+			self._define_sweep_array(index, Fstart = f[0], #Hz
+										Fstop = f[-1], #Hz
+										S21 = S21,
+										Frequencies = f, #Hz
+										Preadout_dB = Pprobe_dBm[index],
+										Pinput_dB = Pprobe_dBm[index] - system_attenuation_before_device,
+										Is_Valid = True,
+										Mask = np.zeros(f.shape, dtype=np.bool),
+										Fr = cd['f_0'], #Note! we are using the resonance freq of the lowest power S21 for all 
+										Q = Q,
+										Qc = cd['Qc'],
+										Heater_Voltage = 0.0
+										)
 
+			curve = ax[1].plot(dff,np.abs(S21), linestyle = '-')
+			
 
-		ax[2].ticklabel_format(axis='x', style='sci',scilimits = (0,0), useOffset=True)	
+		################ Configure Plot
+		ax[1].set_title('Mag Transmission')
+		ax[1].set_xlabel(r'$\delta f_0 / f_0$', color='k')
+		ax[1].set_ylabel(r'Mag[$S_{21}$]', color='k')
+		ax[1].yaxis.labelpad = -4
+		ax[1].ticklabel_format(axis='x', style='sci',scilimits = (0,0), useOffset=True)
+
 		for k in ax.keys():
 			ax[k].tick_params(axis='y', labelsize=9)
 			ax[k].tick_params(axis='x', labelsize=5)
+
+
+		#plt.subplots_adjust(left=.1, bottom=.1, right=None, top=.95 ,wspace=.4, hspace=.4)
+		plt.suptitle('Nonlinear Resonator Plots')
 		plt.show()
-
-		return x
-		#need bounds and downsample vectors
-		#add mag parameter to S21 (e.g n*S21) <-- Results in fit failure
-		#try synthesis method again remove V1  instability
-		#add time of calculation
-		#add recalculate cable delay
-		#add cavity amplitude subplot
-		#try nonlinear optimizer
-
-		#Note: curves are ft reasonably well when max solution is selected. If Min solution is selected, the fit is bad. 
-		#This might suggest the upsweep  data is insufficient for good fit. Or maybe first we fit to the upsweep data, then we construct down sweep data
-		#and minimize difference between it and the measurment.
-
-
-
 
 
 
