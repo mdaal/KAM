@@ -1941,7 +1941,7 @@ class sweep:
 		if Add_Temperatures == True:
 			if self.metadata.Num_Temperatures < 1:
 				Temperature_Calibration = self.metadata.Temperature_Calibration
-				if (self.metadata.Fridge_Base_Temp != None) & (self.Sweep_Array['Heater_Voltage'][0] == 0): #& (self.Sweep_Array.size == 1):
+				if (self.metadata.Fridge_Base_Temp != None) & (max(self.Sweep_Array['Heater_Voltage']) == min(self.Sweep_Array['Heater_Voltage'])): #& (self.Sweep_Array.size == 1):
 					#This is usually the case of a survey or power sweep: done at base temp with no Heater power
 					self.Sweep_Array['Temperature'][:] = self.metadata.Fridge_Base_Temp
 					print('Setting Tempreature to metadata.Fridge_Base_Temp value.')

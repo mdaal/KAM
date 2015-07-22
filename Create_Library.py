@@ -10,18 +10,18 @@ path = '/Users/miguel_daal/Desktop/Some_Data/'
 
 Find_Temperatures = 0
 Cable_Calibration = 1
-Run52b = 1
-Run51a = 1
-Run51b = 1
-Run49a = 1
-Run48a = 1
-Run48b = 1
-Run47a = 1
-Run46a = 1
-Run45b = 1
-Run45a = 1
+Run52b = 0
+Run51a = 0
+Run51b = 0
+Run49a = 0
+Run48a = 0
+Run48b = 0
+Run47a = 0
+Run46a = 0
+Run45b = 0
+Run45a = 0
 Run44b = 1
-Run44a = 1
+Run44a = 0
 
 sensor_ids = np.array(['S1','S2','S3','S4','S5','S6','S7','S8','S9','S10','S11','S12','S13','S14','S15','S16'])
 Z3 = np.array([85.7779239,	67.8250245,	50.1762772,	33.824545,	21.2469277,	12.7273743,	7.18826586,	3.5793348,	78.4335348,	61.6228064,	45.6375047,	31.5852207,	20.407557,	12.372514,	7.10001542,	3.89603542])
@@ -579,7 +579,7 @@ if Run44b:
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
 
-	if 1: #P Sweep 
+	if 0: #P Sweep 
 		filename = path + 'Run44b/P_Sweep/44b_ScanData_60mK_2013121105756.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.LNA['LNA'] = 'SiGe #1'
