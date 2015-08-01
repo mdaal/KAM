@@ -617,7 +617,7 @@ if 0:
 
 
 
-if 1:
+if 0:
 	database_location = 'Data/My_Data_Library.h5'
 	import KAM
 	reload(KAM)	
@@ -733,3 +733,257 @@ if 0:
 	curve = ax[2].plot(S21_lower_band.real,S21_lower_band.imag, linestyle = '-')
 	curve = ax[2].plot(S21_upper_band.real,S21_upper_band.imag, linestyle = '-')
 	plt.show()
+
+if 0:
+	database_location = 'Data/My_Data_Library.h5'
+	import KAM
+	reload(KAM)	
+	swp  = KAM.sweep();  
+
+	swp.load_hf5('/Run45a/T201402061732', filename = database_location);
+
+
+	index = 11
+	def fit(index,sweep):
+	    sweep.pick_loop(index)
+	    sweep.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
+	    sweep.normalize_loop()
+	    sweep.remove_cable_delay(Show_Plot = False, Verbose = True,Force_Recalculate = False) 
+	    sweep.circle_fit(Show_Plot = True) 
+	    sweep.phase_fit(Fit_Method = 'Multiple',Verbose = True, Show_Plot = True)
+
+
+	Readout_Dict = {}
+
+	F = [409600000., 509500000, 609400000, 709300000, 809200000, 909100000, 1009000000]
+	G = [48.2976, 48.1631, 48.0342, 47.684, 47.3322, 46.9015, 46.4087]
+	Nm = [5.48601,5.72677,5.77245,6.0146,5.94466,5.95258,6.13591]
+	Np = Nm
+	P1dB = -48.
+	Readout_Dict['SiGe #2'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
+
+	F = [400000000., 500000000, 600000000, 700000000, 800000000, 900000000, 1000000000]
+	G = [47.5, 47.3, 47.0, 46.6, 46.0, 45.6, 45.0]
+	Nm = [5.7, 6.3, 6.1, 6.3, 6.6, 6.6, 7.0]
+	Np = Nm
+	P1dB = -48.
+	Readout_Dict['SiGe #1'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
+
+	F = [400000000., 500000000, 600000000, 700000000, 800000000, 900000000, 1000000000]
+	G = [31.6958, 31.7332, 33.3491, 34.582, 36.4723, 35.4597, 35.4288]
+	Nm = [10.0454, 9.13519, 8.59369, 8.28292, 8.11164, 7.86398, 7.5084]
+	Np = Nm
+	P1dB = -40.
+	Readout_Dict['InP #2'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
+
+	F = [395000000.,424500000, 454000000, 483500000, 513000000, 542500000, 572000000, 601500000, 631000000, 660500000, 690000000, 719500000, 749000000, 778500000, 808000000, 837500000, 867000000, 896500000, 926000000, 955500000, 985000000]
+	Nm = [488.6053076, 489.2697104, 474.3872914, 473.1617407, 467.3813032, 470.0790808, 460.311823, 446.0557503, 439.5120869, 439.2718329, 429.4232912, 423.771945, 414.857644, 419.2513872, 410.1854824, 401.0360685, 398.6567012, 400.5274794, 389.6199922, 390.1977107, 411.6113207]
+	G = [ 39.1,  39.1,  39.1,  39. ,  39. ,  39. ,  39. ,  38.9,  38.9, 38.9,  38.8,  38.7,  38.7,  38.6,  38.6,  38.5,  38.4,  38.4, 38.3,  38.2,  38.1]
+	Np = Nm
+	P1dB = -11.2 # at input
+	Readout_Dict['AML016P3411'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
+
+	F = [3000000., 3000000000]
+	G = [1.,1]
+	Nm = [120743991885170.77,120743991885170.77]#rms Peak Voltage Noise
+	Np = Nm
+	P1dB = +20. # Fault power level. 
+	Readout_Dict['NA']  = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
+
+
+	swp.metadata.Readout_Dict = Readout_Dict
+	swp.metadata.Digitizer = 'NA'
+	fit(index,swp)
+
+
+	def plot_fit(R = 0,tau = 0):
+		S21 = swp.Sweep_Array[index]['S21']
+		F = swp.Sweep_Array[index]["Frequencies"]
+		s,t,u,g,x = swp.chi_square()
+		s21 =  np.vectorize(s)
+		z = s21(F)*np.exp(np.complex(0.,R))* np.exp(np.complex(0,-2*np.pi*tau)*F)
+		fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
+		ax = fig.add_subplot(111,aspect='equal')
+		line = ax.plot(S21.real,S21.imag,'bo', label = 'Original Data')
+		line = ax.plot(z.real,z.imag,'ro', label = 'Primary Fit')
+
+		# num 11 run 45a, chi squared 39901
+		#x = np.array([ np.complex(-2.71548272e-01,-0.80447015), np.complex(1.00782510e-07,0.) , np.complex(1.16375424e+05,0.), np.complex(4.32088382e+05,0.),np.complex(6.64759813e+08,0.), np.complex(-1.09128025e-01,0.)  ])
+		# num 8 run 45a, chi squared 22663
+		#x = np.array([ np.complex(-2.81539665e-01,-0.77691904), np.complex(1.00782510e-07,0.) , np.complex(1.31034209e+05,0.), np.complex(3.54867553e+05,0.) ,np.complex(6.64764400e+08,0.), np.complex(-1.47657166e-02,0.) ])
+		# num 0 run 45a, chi squared  693
+		#x = np.array([ np.complex(-2.95832897e-01,-0.73027548), np.complex(1.00782510e-07,0.) ,np.complex(1.50631220e+05,0.)  ,  np.complex(3.18966486e+05,0.) , np.complex(6.64768336e+08,0. ) , np.complex(1.33061244e-01,0.) ])
+		# num 9 run 45a, chi squared  29195
+		#x = np.array([ np.complex(-2.81846369e-01,-0.78787097),   np.complex(9.47642903e-08,0)  ,np.complex(1.23896077e+05,0)        ,   np.complex(3.68141450e+05,0)        , np.complex(6.64763039e+08,0)        ,  np.complex(-4.68587128e-02,0)        ])
+		s_fit = lambda f: swp.loop.normalization * np.exp(np.complex(0.,angle(x[0]))) * np.exp(np.complex(0,-2*np.pi*x[1])*f) * (1 - (x[2]/x[3])*np.exp(np.complex(0,-x[5])) / np.complex(1, 2*x[2]*(f-x[4])/x[4]))
+		S = np.vectorize(s_fit)
+		line = ax.plot(S(F).real,S(F).imag,'go', label = 'Secondary Fit')
+		ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
+		ax.set_xlabel(r'$\Re[S_{21}(f)]$')
+		ax.set_ylabel(r'$\Im[S_{21}(f)]$')
+		ax.yaxis.labelpad = -6
+		fig.savefig('Loop_Run_{0}_Index_{1}'.format(swp.metadata.Run, index), dpi = 300, transparency  = True)
+		#ax.set_title('Run: {0}; Sensor: {1}; Ground: {2}; Record Date: {3}'.format(swp.metadata.Run, swp.metadata.Sensor, swp.metadata.Ground_Plane, swp.metadata.Time_Created),fontsize=10)
+		return x
+
+if 0:
+
+	database_location = 'Data/My_Data_Library.h5'
+	import KAM
+	reload(KAM)	
+	swp  = KAM.sweep();  
+	swp.load_hf5('/Run45a/T201402061732', filename = database_location);
+	# SC = swp.metadata.Readout_Dict
+
+	# fig = plt.figure( figsize=(5,5))#, dpi=150)
+	# ax = fig.add_subplot(111)
+
+	# for key in SC.keys():
+	# 	print key
+	# 	ax.plot(SC[key]['freq'], SC[key]['g'], 'o')
+	# 	deg =  min(len(SC[key]['freq']) - 2,9) if len(SC[key]['freq']) >2 else len(SC[key]['freq']) - 1
+		
+
+	# 	#coefs = numpy.polynomial.chebyshev.chebfit(SC[key]['freq'],  SC[key]['g'], deg)
+	# 	coefs = numpy.polynomial.polynomial.polyfit(SC[key]['freq'],  SC[key]['g'], deg)
+	# 	x_sam = linspace(SC[key]['freq'][0], SC[key]['freq'][-1], num=100)
+	# 	#ax.plot(x_sam, numpy.polynomial.chebyshev.chebval(x_sam,coefs),'-')
+	# 	ax.plot(x_sam, numpy.polynomial.polynomial.polyval(x_sam,coefs),'-')
+	# plt.show()
+
+	SC = swp.metadata.System_Calibration
+	for key in SC.keys():
+		print key, '  ', SC[key].keys()
+
+	swp.fit_system_calibration()
+
+	SC = swp.metadata.System_Calibration
+	for key in SC.keys():
+		print key, '  ', SC[key].keys()
+
+	swp.fit_system_calibration()
+
+	SC = swp.metadata.System_Calibration
+	for key in SC.keys():
+		print key, '  ', SC[key].keys()
+
+	fig = plt.figure( figsize=(5,5))#, dpi=150)
+	ax = fig.add_subplot(111)
+
+	for key in SC.keys():
+		print key
+		ax.plot(SC[key]['freq'], SC[key]['g'], 'o')
+		#deg =  min(len(SC[key]['freq']) - 2,9) if len(SC[key]['freq']) >2 else len(SC[key]['freq']) - 1
+		
+
+		#coefs = numpy.polynomial.chebyshev.chebfit(SC[key]['freq'],  SC[key]['g'], deg)
+		#coefs = numpy.polynomial.polynomial.polyfit(SC[key]['freq'],  SC[key]['g'], deg)
+		x_sam = linspace(SC[key]['freq'][0], SC[key]['freq'][-1], num=100)
+		ax.plot(x_sam, numpy.polynomial.chebyshev.chebval(x_sam,SC[key]['g_fit']),'-')
+		#ax.plot(x_sam, numpy.polynomial.polynomial.polyval(x_sam,SC[key]['g_fit']),'-')
+	plt.show()
+
+if 0:
+	database_location = 'Data/My_Data_Library.h5'
+	import KAM
+	reload(KAM)	
+	swp  = KAM.sweep();  
+	swp.load_hf5('/Run45a/T201402061732', filename = database_location);
+
+	swp.loop.index = 0
+	F = swp.Sweep_Array[swp.loop.index]['Frequencies']
+
+	cable_order = ['4K_to_40mK', '300K_to_4K', 'One_Way_300K'] # first , second, third cable stretches
+
+	CC = swp.metadata.Cable_Calibration
+	cable_g = []
+	for i in xrange(len(cable_order)):
+		cable_g.append(CC[cable_order[i]][0]*np.sqrt(F)+CC[cable_order[i]][1]*F+CC[cable_order[i]][2])
+
+if 1:
+	database_location = 'Data/My_Data_Library.h5'
+	import KAM
+	reload(KAM)	
+	swp  = KAM.sweep();  
+
+	swp.load_hf5('/Run45a/T201402061732', filename = database_location);
+
+
+	index = 0
+	def fit(index,sweep):
+	    sweep.pick_loop(index)
+	    sweep.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
+	    sweep.normalize_loop()
+	    sweep.remove_cable_delay(Show_Plot = False, Verbose = False,Force_Recalculate = False) 
+	    sweep.circle_fit(Show_Plot = False) 
+	    sweep.phase_fit(Fit_Method = 'Multiple',Verbose = False, Show_Plot = False)
+	fit(index,swp)
+
+
+	a,b = swp.loop.a,swp.loop.b
+	tau = swp.metadata.Electrical_Delay
+	Q = swp.loop.Q 
+	Qc = swp.loop.Qc 
+	fr = swp.loop.fr 
+	phi = (swp.loop.phi * np.pi/180) + 0*np.pi
+	s21_  = lambda f: swp.loop.normalization * np.exp(np.complex(0.,angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*f*tau)) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / np.complex(1, 2*Q*(f-fr)/fr))
+	s21 =  np.vectorize(s21_)
+
+
+	def plot_fit(R = 0,tau = 0):
+		S21 = swp.Sweep_Array[index]['S21']
+		F = swp.Sweep_Array[index]["Frequencies"]
+		x = swp.complete_fit()
+		
+		z = s21(F)*np.exp(np.complex(0.,R))* np.exp(np.complex(0,-2*np.pi*tau)*F)
+		fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
+		ax = fig.add_subplot(111,aspect='equal')
+		line = ax.plot(S21.real,S21.imag,'bo', label = 'Original Data')
+		line = ax.plot(z.real,z.imag,'ro', label = 'Primary Fit')
+
+		# num 11 run 45a, chi squared 39901
+		#x = np.array([ np.complex(-2.71548272e-01,-0.80447015), np.complex(1.00782510e-07,0.) , np.complex(1.16375424e+05,0.), np.complex(4.32088382e+05,0.),np.complex(6.64759813e+08,0.), np.complex(-1.09128025e-01,0.)  ])
+		# num 8 run 45a, chi squared 22663
+		#x = np.array([ np.complex(-2.81539665e-01,-0.77691904), np.complex(1.00782510e-07,0.) , np.complex(1.31034209e+05,0.), np.complex(3.54867553e+05,0.) ,np.complex(6.64764400e+08,0.), np.complex(-1.47657166e-02,0.) ])
+		# num 0 run 45a, chi squared  693
+		#x = np.array([ np.complex(-2.95832897e-01,-0.73027548), np.complex(1.00782510e-07,0.) ,np.complex(1.50631220e+05,0.)  ,  np.complex(3.18966486e+05,0.) , np.complex(6.64768336e+08,0. ) , np.complex(1.33061244e-01,0.) ])
+		# num 9 run 45a, chi squared  29195
+		#x = np.array([ np.complex(-2.81846369e-01,-0.78787097),   np.complex(9.47642903e-08,0)  ,np.complex(1.23896077e+05,0)        ,   np.complex(3.68141450e+05,0)        , np.complex(6.64763039e+08,0)        ,  np.complex(-4.68587128e-02,0)        ])
+		
+		s_fit = lambda f: swp.loop.normalization * np.exp(np.complex(0.,angle(np.complex(x[0],x[1])))) * np.exp(np.complex(0,-2*np.pi*x[2])*f) * (1 - (x[3]/x[4])*np.exp(np.complex(0,-x[6])) / np.complex(1, 2*x[3]*(f-x[5])/x[5]))
+		S = np.vectorize(s_fit)
+		line = ax.plot(S(F).real,S(F).imag,'go', label = 'Secondary Fit')
+		ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
+		ax.set_xlabel(r'$\Re[S_{21}(f)]$')
+		ax.set_ylabel(r'$\Im[S_{21}(f)]$')
+		ax.yaxis.labelpad = -6
+		fig.savefig('Loop_Run_{0}_Index_{1}'.format(swp.metadata.Run, index), dpi = 300, transparency  = True)
+		#ax.set_title('Run: {0}; Sensor: {1}; Ground: {2}; Record Date: {3}'.format(swp.metadata.Run, swp.metadata.Sensor, swp.metadata.Ground_Plane, swp.metadata.Time_Created),fontsize=10)
+
+
+		return x
+	plot_fit()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

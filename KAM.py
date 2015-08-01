@@ -11,7 +11,8 @@ import matplotlib.pyplot as plt
 import datetime
 from scipy.optimize import minimize, curve_fit, leastsq# , root,newton_krylov, anderson
 from scipy.interpolate import interp1d
-		
+from scipy import constants
+
 import numpy.ma as ma
 import sys # for status percentage
 
@@ -61,7 +62,11 @@ class loop:
 		self.depth_est = None
 		self.Q_est = None
 
-		#fit quantities
+		# intermediate fit quantities
+		self.normalization = 1 # probably should  get rid of
+		
+
+		# phase fit quantities
 		self.Q = None 
 		self.Qc = None
 		self.Qi = None
@@ -75,6 +80,20 @@ class loop:
 		self.phase_fit_z = None
 		self.phase_fit_mask = None
 
+		# complete fit quantities
+		self.cQ = None 
+		self.cQc = None
+		self.cQi = None
+		self.cfr = None 
+		#self.FWHM = None
+		self.cphi = None
+		self.cchisquare = None
+		#self.pvalue = None
+		#self.phase_fit_method = None
+		self.cphase_fit_success = None
+		#self.phase_fit_z = None
+		#self.phase_fit_mask = None
+
 	def __del__(self):
 		pass
 		
@@ -85,6 +104,7 @@ class metadata:
 	This specifies the contents of the metadata.
 	'''
 	def __init__(self):
+		#metadata imported from scan data
 		self.Time_Created = None
 		self.Atten_Added_At_NA = None # redundant if self.Atten_NA_Input and self.Atten_NA_Output are defined; should be merged somehow
 		self.NA_Average_Factor = None
@@ -103,11 +123,6 @@ class metadata:
 		self.Min_Freq_Resolution = None
 		self.Run = None
 		self.Sensor = None
-		self.Resonator_Width = None #list if more than one
-		self.Resonator_Thickness = None #list if more than one
-		self.Resonator_Impedance = None
-		self.Resonator_Eeff = None # Resonator Dielectric Constant
-		self.Feedline_Impedance = None
 		self.Fridge_Run_Start_Date = None
 		self.Fsteps  = None
 		#self.IS_Sonnet_Simulation = None
@@ -120,12 +135,25 @@ class metadata:
 		self.Meaurement_Duration = None
 		self.Num_Heater_Voltages = None
 		self.Num_Powers = None
-		self.Num_Ranges = None 
-		self.Cable_Calibration = None
-		self.Temperature_Calibration = None # a list of tuples [(heatervoltge1, temperature), (heatervoltage2,temperature, ...)]
+		self.Num_Ranges = None 		
 		self.Num_Temperatures = None #number of temperature points taken after every scan for each heater voltage/power
 		self.Thermometer_Configuration = None
-		self.Electrical_Delay = None # Seconds
+		
+
+
+		# manual entry metadata
+		self.Electrical_Delay = None # Seconds ---  computed at time of data library generation
+		self.Resonator_Width = None #list if more than one
+		self.Resonator_Thickness = None #list if more than one
+		self.Resonator_Impedance = None
+		self.Resonator_Eeff = None # Resonator Dielectric Constant
+		self.Feedline_Impedance = None
+		self.Cable_Calibration = None
+		self.Temperature_Calibration = None # a list of tuples [(heatervoltge1, temperature), (heatervoltage2,temperature, ...)]
+		self.System_Calibration = None
+
+		self.RTAmp = None
+		self.Digitizer = None
 
 
 class thermometry:
@@ -435,9 +463,18 @@ class sweep:
 			("Qc"						, np.float64),
 			("Fr"						, np.float64), # in Hz
 			("Is_Valid"					, np.bool),
+			("Chi_Squared"              , np.float64),
 			("Mask"						, np.bool,(fsteps,)), # array mask selecting data used in phase fit
+			("cQ"						, np.float64),
+			("cQc"						, np.float64),
+			("cFr"						, np.float64), # in Hz
+			("cIs_Valid"				, np.bool),
+			("cChi_Squared"             , np.float64),
+			("cPhi"						, np.float64),
+
 			#("S21_Processed"            , np.complex128, (fsteps,)), # Processed S21 used in phase fit 
 			])
+
 
 	def _define_sweep_array(self,index,**field_names):
 		#for field_name in self.sweep_data_columns.fields.keys():
@@ -689,7 +726,11 @@ class sweep:
 		self._define_sweep_array(0, Fstart = freq_convert(Touchstone_Data['Freq'].min()), #Hz
 									Fstop = freq_convert(Touchstone_Data['Freq'].max()), #Hz
 									S21 = Touchstone_Data['S21r']+j*Touchstone_Data['S21i'],
-									Frequencies = freq_convert(Touchstone_Data['Freq']) #Hz
+									Frequencies = freq_convert(Touchstone_Data['Freq']), #Hz
+									#Pinput_dB = 0,
+									Is_Valid = True,
+									#Mask = False, needs to be an array of lengh of S21
+									Chi_Squared = 0,
 									)
 
 
@@ -1004,6 +1045,7 @@ class sweep:
 		f= self.loop.freq	
 		
 		normalization = np.abs(S21[base:offset]).mean() # consider using medium()?
+		self.loop.normalization = normalization
 		S21_normalized = S21/normalization
 		self.loop.z = S21_normalized
 
@@ -1818,8 +1860,8 @@ class sweep:
 		self.loop.fr = fr = fit[bestfit].x[1]
 		self.loop.FWHM = fr/Q
 		self.loop.phi = (fit[bestfit].x[0]-1*np.pi)*180/np.pi
-		self.loop.chisquare, self.loop.pvalue = chisquare( z_theta,f_exp=fit[bestfit].x[0] + 2.0*np.arctan(2.0*Q*(1-f/fr)))
-		
+		self.loop.chisquare, self.loop.pvalue = chisquare( z_theta_c,f_exp=fit[bestfit].x[0] + 2.0*np.arctan(2.0*Q*(1-f_c/fr)))
+		self.loop.chisquare = self.loop.chisquare/ f_c.shape[0]
 		#estimated quantities from MAG S21 
 		self.loop.fr_est = fr_est
 		self.loop.FWHM_est = FWHM_est
@@ -1918,7 +1960,8 @@ class sweep:
 			# plt.show()
 
 	def fill_sweep_array(self, Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False ):
-		
+		Complete_Fit = True
+
 		if Compute_Preadout == True:
 			needed = ('Atten_NA_Output', 'Atten_At_4K','Cable_Calibration')
 
@@ -1929,7 +1972,8 @@ class sweep:
 
 				Atten_NA_Output = self.metadata.Atten_NA_Output
 				Atten_At_4K = self.metadata.Atten_At_4K
-				k = self.metadata.Cable_Calibration
+				Cable_Calibration_Key = 'One_Way_40mK'
+				k = self.metadata.Cable_Calibration[Cable_Calibration_Key]
 
 			if Fit_Resonances == False:
 				print('Resonance fit not selected. Computation of Preadout_dB requires knowledge of resonance frequency and may not work.')
@@ -1979,10 +2023,10 @@ class sweep:
 				self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
 
 				# Normalize Loop
-				self.normalize_loop()
+				self.normalize_loop() # should not need to use this
 
 				# Remove Cable Delay
-				self.remove_cable_delay(Show_Plot = False, Verbose = False)	
+				self.remove_cable_delay(Show_Plot = False, Verbose = False)	# should do nothing if a delay is defined in metadata
 
 				# Fit loop to circle
 				self.circle_fit(Show_Plot = False)
@@ -1994,8 +2038,19 @@ class sweep:
 				self._define_sweep_array(index, Q = self.loop.Q,
 												Qc = self.loop.Qc,
 												Fr = self.loop.fr,
-												Mask = self.loop.phase_fit_mask)
+												Mask = self.loop.phase_fit_mask,
+												Chi_Squared = self.loop.chisquare)
+
+				if Complete_Fit:
+					self.complete_fit()
+					self._define_sweep_array(index, cQ = self.loop.cQ,
+													cQc = self.loop.cQc,
+													cFr = self.loop.cfr,
+													cPhi = self.loop.cphi,
+													cChi_Squared = self.loop.cchisquare,
+													cIs_Valid = self.cphase_fit_success if self.Sweep_Array['Is_Valid'][index] else self.Sweep_Array['Is_Valid'][index])
 												
+
 
 				# Only execute if phase_fit_success is False to avoid setting Is_Valid true when it was previously set fulse for a different reason, e.g bad Temp data
 				if self.loop.phase_fit_success == False: 
@@ -2026,14 +2081,406 @@ class sweep:
 			del(self.loop)
 			self.loop = loop()
 		print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
+	
+	
+	def complete_fit(self):
+		k = constants.value('Boltzmann constant') #unit is [J/k]
+		BW = self.metadata.IFBW #unit is [Hz]	 
+		SC = self.metadata.System_Calibration # contains Noise powers, gains and P1dB of readout devices
+		CC = self.metadata.Cable_Calibration
+		self.metadata.RTAmp = 'AML016P3411'
+		
+		R = 50
+		j = np.complex(0,1)
 
-	def fit_cable_loss(self, freq_range = [400e6, 1e9], Verbose = True, Show_Plot = True):
+		Use_Mask = True
+
+		if Use_Mask:
+			F = ma.array(self.Sweep_Array[self.loop.index]['Frequencies'],mask = self.Sweep_Array[self.loop.index]['Mask'])
+			F = F.compressed()
+			S21 = ma.array(self.Sweep_Array[self.loop.index]['S21'],mask = self.Sweep_Array[self.loop.index]['Mask'])
+			S21 = S21.compressed()
+		else:
+			F = self.Sweep_Array[self.loop.index]['Frequencies']
+			S21 = self.Sweep_Array[self.loop.index]['S21']
+		#g = lambda dB: np.power(10.0,dB/10.0)
+
+		Fit_Method = 'Multiple'
+		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
+		   Fit_Method={Fit_Method}
+
+		# cable_order = ['300K_to_4K', 'One_Way_300K'] #['4K_to_40mK', '300K_to_4K', 'One_Way_300K'] # first , second, third cable stretches
+		# cable_temp =  [(290.+4.)/2, 290]#[4.2, (290.+4.)/2, 290]
+
+		
+		# cable_g = []
+		# cable_Tn = []
+		# for i in xrange(len(cable_order)):
+		# 	g = CC[cable_order[i]][0]*np.sqrt(F)+CC[cable_order[i]][1]*F+CC[cable_order[i]][2]
+		# 	g = np.power(10.0,g/10.0)
+		# 	cable_g.append(g)
+		# 	Tn = ((1.0/g)-1)*cable_temp[i]
+		# 	cable_Tn.append(Tn)
+
+		
+
+
+		chain  = []
+		if self.metadata.LNA['LNA'] is not None:
+			chain.append(self.metadata.LNA['LNA'])
+
+		chain.append('300K_to_4K')
+
+		if self.metadata.RTAmp_In_Use:
+			chain.append(self.metadata.RTAmp) 
+
+		chain.append('One_Way_300K')
+		#chain.append('NA')
+
+		cable_temp = {'300K_to_4K' : (290.+4.)/2, 'One_Way_300K': 290}
+		Tn_p_s = []
+		Tn_m_s = []
+		g_s = []
+		for i in xrange(len(chain)):
+			device = chain[i]
+			if device in CC.keys():
+				g = CC[device][0]*np.sqrt(F)+CC[device][1]*F+CC[device][2]
+				g = np.power(10.0,g/10.0)
+				g_s.append(g)
+				Tn = ((1.0/g)-1)*cable_temp[device]
+				Tn_p_s.append(Tn)
+				Tn_m_s.append(Tn)
+				continue
+
+			if device in SC.keys():
+				g = np.polynomial.chebyshev.chebval(F,SC[device]['g_fit'])
+				g = np.power(10.0,g/10.0)
+				g_s.append(g)
+				Tn_p_s.append(np.polynomial.chebyshev.chebval(F,SC[device]['Tn_p_fit']))
+				Tn_m_s.append(np.polynomial.chebyshev.chebval(F,SC[device]['Tn_m_fit']))
+				continue
+
+			# warn me if the component is missing from calibration data
+			print('Component not found in calibration data!!')
+			1/0
+		print chain
+		print g_s
+		print len(g_s)
+		Tn_p_tot = np.zeros_like(F)
+		Tn_m_tot = np.zeros_like(F)
+		g_tot  = np.prod(g_s, axis = 0)
+		for i in xrange(len(chain)):
+			Tn_p_tot = Tn_p_tot +  Tn_p_s[i]/np.prod(g_s[:i], axis = 0)
+			Tn_m_tot = Tn_m_tot +  Tn_m_s[i]/np.prod(g_s[:i], axis = 0)
+
+		print Tn_m_tot
+		print g_tot
+
+
+		sigma_squared_m = 4.0*k*R*g_tot*self.metadata.IFBW* Tn_m_tot
+		sigma_squared_p = 4.0*k*R*g_tot*self.metadata.IFBW* Tn_p_tot
+		print sigma_squared_m
+
+
+		a_0,b_0  = self.loop.a, self.loop.b
+		tau_0    = self.metadata.Electrical_Delay
+		Q_0      = self.loop.Q 
+		Qc_0     = self.loop.Qc 
+		fr_0     = self.loop.fr 
+		phi_0    = (self.loop.phi * np.pi/180) + 0*np.pi
+
+		#p0 is the initial guess
+		p0 = np.array([a_0,b_0,tau_0,Q_0, Qc_0, fr_0, phi_0])
+
+		def obj(x,s21, sigma_squared_m,sigma_squared_p ,freq):
+			a,b,tau,Q, Qc, fr, phi= x
+			s21_fit  = self.loop.normalization * np.exp(np.complex(0.,self._angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+			diff = s21 - s21_fit
+			frac = (diff*diff.conj()).real/sigma_squared_m
+			#frac = (np.square(diff.real)/sigma_squared_m) + (np.square(diff.imag)/sigma_squared_m) 
+			N = freq.shape[0]*1.0 - x.shape[0]
+			return  frac.sum()/N
+
+		
+		
+		
+		#Each fit method is saved as a lambda function in a dictionary called fit_func
+		fit_func = {}
+		fit_func['Powell'] = lambda : minimize(obj, p0, args=(S21,sigma_squared_m,sigma_squared_p ,F), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
+		#fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(S21,sigma_squared ,F), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
+		#fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
+
+		fit = {}
+		if isinstance(Fit_Method,set):      #All string inputs for Fit_Method were changed to sets at the begining of phase_fit
+		   if Fit_Method == {'Multiple'}:
+		      for method in fit_func.keys():
+		         fit[method] = fit_func[method]() # Execute the fit lambda function
+		   else:
+		      for method in Fit_Method:
+		         if method not in fit_func.keys():
+		            print("Unrecognized fit method. Aborting fit. \n\t Must choose one of {0} or 'Multiple'".format(fit_func.keys()))
+		            return
+		         else:   
+		            fit[method] = fit_func[method]()
+		else:
+		   print("Unrecognized fit method data type. Aborting fit. \n\t Please specify using a string or a set of strings from one of {0} or 'Multiple'".format(fit_func.keys()))
+		   return	         	   
+		               				
+		for method in fit.keys():
+			print('\n{0} Minimzation Result:\n{1}\n'.format(method,fit[method]))
+		#Does not work if the objective function is re-arranged as in the following
+		# print('Nelder-Mead 2 ################# ')
+		# def obj(x,z_theta,f):
+		# 	theta,fr,Q = x
+		# 	return np.square(np.tan((z_theta - theta)/2) - (2.0*Q*(1-f/fr))).sum()
+		# res = minimize(obj, p0, args=(z_theta,f), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-20, callback=None, options={'disp':True})
+		# print(res)
+	
+		# Least square method does not find a good Q fit and the sum of the squares for solution is fairly high
+		# print('Least Square ################# ')
+		# print(fit['Least-Squares'])
+		# print(np.square(fit['Least-Squares'][2]['fvec']).sum()) # this is the value of the sum of the squares for the solution
+		# x = fit['Least-Squares'][0] 
+		
+		#x = res.x 
+		bestfit = list(fit)[0]
+		lowest = fit[bestfit].fun
+		for key in fit.keys(): 
+			if fit[key].fun < lowest:
+				lowest = fit[key].fun
+				bestfit = key
+
+
+		self.cQ = fit[bestfit].x[3]	
+		self.cQc = fit[bestfit].x[4]	
+		self.cQi = 1.0/ ((1./self.Q ) - (1./self.cQc ))
+		self.cfr = fit[bestfit].x[5]	
+		#self.FWHM = None
+		self.cphi = fit[bestfit].x[5]	
+		self.cchisquare = fit[bestfit].fun
+		#self.pvalue = None
+		#self.phase_fit_method = None
+		self.cphase_fit_success = fit[bestfit].success
+		#self.phase_fit_z = None
+		#self.phase_fit_mask = None
+
+
+
+		return fit[bestfit].x
+
+
+
+
+	def _angle(self, z, deg = 0):
+		''' If z is a masked array. angle(z) returns the angle of the elements of z
+		within the branch [0,360] instead of [-180, 180], which is the branch used
+		in np.angle(). The mask of angle(z) is set to be the mask of the input, z.
+
+		If z is not a masked array, then angle(z) is the same as np.angle except 
+		that range is [0,360] instead of [-180, 180]
+
+		If z is a vector, then an angle shift is added to z  so the z[0] is 0 degrees
+		If z is a number, then dont shift angle'''
+		a = np.angle(z, deg = deg)
+		try:
+			a = a - a[0] #if a is not a vector, then a[0] will throw an error
+		except:
+			pass
+		p = np.where(a<=0,1,0)
+		n = 2
+		units = n*np.pi if deg == 0 else n*180
+		try:
+			a = ma.array(a + p*units,mask =z.mask) 
+		except:
+			a = a + p*units #if z is not a masked array do this
+		return a
+
+
+	def chi_square(self):
+		from scipy import interpolate
+		k = constants.value('Boltzmann constant') #unit is [J/k]
+		BW = self.metadata.IFBW #unit is [Hz]
+		#dBm2Vp = lambda dBm: 0.001*np.power(10,dBm/10) # convert dBm to Vp, peak voltage
+		g = lambda dB: np.power(10.0,dB/10.0)
+		RD = self.metadata.System_Calibration # contains Noise powers, gains and P1dB of readout devices
+		self.metadata.RTAmp = 'AML016P3411'
+		cal = self.metadata.Cable_Calibration['One_Way_40mK']
+		R = 50
+		j = np.complex(0,1)
+
+		Fit_Method = 'Multiple'
+		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
+		   Fit_Method={Fit_Method}
+
+		if k is not None:
+			g_cable = lambda f: cal[0]*np.sqrt(f)+cal[1]*f+cal[2] #in dB -- attenuation detween device and digitizer
+			Tn_m_cable = lambda f: ((1./np.power(10,(cal[0]*np.sqrt(f)+cal[1]*f+cal[2])/10.)) -1)*290 #assuming room temperature cabling
+			Tn_p_cable = lambda f: ((1./np.power(10,(cal[0]*np.sqrt(f)+cal[1]*f+cal[2])/10.)) -1)*290
+		else:
+			g_cable = lambda f: 0. #in dB
+			Tn_m_cable = lambda f:0.
+			Tn_p_cable = lambda f:0.
+
+		if self.metadata.LNA['LNA'] is not None:
+			g_primary = interpolate.interp1d(RD[self.metadata.LNA['LNA']]['freq'], RD[self.metadata.LNA['LNA']]['g']) #in dB
+			Tn_m_primary = interpolate.interp1d(RD[self.metadata.LNA['LNA']]['freq'], RD[self.metadata.LNA['LNA']]['Tn_m'])
+			Tn_p_primary = interpolate.interp1d(RD[self.metadata.LNA['LNA']]['freq'], RD[self.metadata.LNA['LNA']]['Tn_p'])
+		else:
+			g_primary = lambda f:0
+			Tn_m_primary = lambda f:0
+			Tn_p_primary = lambda f:0
+
+		if self.metadata.RTAmp_In_Use == 1:
+			g_secondary = interpolate.interp1d(RD[self.metadata.RTAmp]['freq'], RD[self.metadata.RTAmp]['g']) #in dB
+			Tn_m_secondary = interpolate.interp1d(RD[self.metadata.RTAmp]['freq'], RD[self.metadata.RTAmp]['Tn_m'])
+			Tn_p_secondary = interpolate.interp1d(RD[self.metadata.RTAmp]['freq'], RD[self.metadata.RTAmp]['Tn_p'])
+		else:
+			g_secondary = lambda f:0.
+			Tn_m_secondary = lambda f:0.
+			Tn_p_secondary = lambda f:0.
+
+		if self.metadata.Digitizer is not None:
+			g_digitizer = interpolate.interp1d(RD[self.metadata.Digitizer]['freq'], RD[self.metadata.Digitizer]['g']) #in dB
+			Tn_m_digitizer = interpolate.interp1d(RD[self.metadata.Digitizer]['freq'], RD[self.metadata.Digitizer]['Tn_m'])
+			Tn_p_digitizer = interpolate.interp1d(RD[self.metadata.Digitizer]['freq'], RD[self.metadata.Digitizer]['Tn_p'])
+		else:
+			g_digitizer = lambda f:0.
+			Tn_m_digitizer = lambda f:0.
+			Tn_p_digitizer= lambda f:0.
+
+
+
+
+
+		var = 0 # The variance
+		Teq_m = lambda f: Tn_m_primary(f) + Tn_m_secondary(f)/g(g_primary(f)) + Tn_m_cable(f)/g(g_secondary(f)+g_primary(f)) + Tn_m_digitizer(f)/g(g_secondary(f)+g_primary(f)+g_cable(f))
+
+		Teq_p = lambda f: Tn_p_primary(f) + Tn_p_secondary(f)/g(g_primary(f)) + Tn_p_cable(f)/g(g_secondary(f)+g_primary(f)) + Tn_p_digitizer(f)/g(g_secondary(f)+g_primary(f)+g_cable(f))
+		geq = lambda f: g(g_secondary(f)+g_primary(f)+g_cable(f)+ g_digitizer(f))
+		sigma_squared =  lambda f: 4*k*R*geq(f)*self.metadata.IFBW*(np.complex(1,0) * Teq_m(f) + np.complex(0,1) * Teq_p(f))
+		sigma_squared = np.vectorize(sigma_squared)
+
+		F = self.Sweep_Array[self.loop.index]['Frequencies']
+
+		S21 = self.Sweep_Array[self.loop.index]['S21']
+		
+
+		zc = np.complex(self.loop.a,self.loop.b)
+		tau = self.metadata.Electrical_Delay
+		Q = self.loop.Q 
+		Qc = self.loop.Qc 
+		#Qi = self.loop.Qi 
+		fr = self.loop.fr 
+		phi = (self.loop.phi * np.pi/180) + 0*np.pi
+		s21_fit  = lambda f: self.loop.normalization * np.exp(np.complex(0.,angle(zc))) * np.exp(np.complex(0,-2*np.pi*f*tau)) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / np.complex(1, 2*Q*(f-fr)/fr))
+		
+
+
+		def obj(x,S21, sigma_squared ,freq):
+			zc,tau,Q, Qc, fr, phi= x
+			s21_fit  = lambda f: self.loop.normalization * np.exp(np.complex(0.,angle(zc))) * np.exp(np.complex(0,-2*np.pi*f*tau)) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / np.complex(1, 2*Q*(f-fr)/fr))
+			s21_fit = np.vectorize(s21_fit)
+			diff = S21- s21_fit(freq)
+			sigma2 = sigma_squared(freq)
+			frac = (np.square(diff.real)/sigma2.real) + (np.square(diff.imag)/sigma2.imag) 
+			N = freq.shape[0]*1.0
+			return  frac.sum()/N
+
+		#p0 is the initial guess
+		p0 = np.array([zc,tau,Q, Qc, fr, phi])
+		
+		#Each fit method is saved as a lambda function in a dictionary called fit_func
+		fit_func = {}
+		fit_func['Powell'] = lambda : minimize(obj, p0, args=(S21,sigma_squared ,F), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
+		#fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(S21,sigma_squared ,F), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
+		#fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
+
+		fit = {}
+		if isinstance(Fit_Method,set):      #All string inputs for Fit_Method were changed to sets at the begining of phase_fit
+		   if Fit_Method == {'Multiple'}:
+		      for method in fit_func.keys():
+		         fit[method] = fit_func[method]() # Execute the fit lambda function
+		   else:
+		      for method in Fit_Method:
+		         if method not in fit_func.keys():
+		            print("Unrecognized fit method. Aborting fit. \n\t Must choose one of {0} or 'Multiple'".format(fit_func.keys()))
+		            return
+		         else:   
+		            fit[method] = fit_func[method]()
+		else:
+		   print("Unrecognized fit method data type. Aborting fit. \n\t Please specify using a string or a set of strings from one of {0} or 'Multiple'".format(fit_func.keys()))
+		   return	         	   
+		               				
+		for method in fit.keys():
+			print('\n{0} Minimzation Result:\n{1}\n'.format(method,fit[method]))
+		#Does not work if the objective function is re-arranged as in the following
+		# print('Nelder-Mead 2 ################# ')
+		# def obj(x,z_theta,f):
+		# 	theta,fr,Q = x
+		# 	return np.square(np.tan((z_theta - theta)/2) - (2.0*Q*(1-f/fr))).sum()
+		# res = minimize(obj, p0, args=(z_theta,f), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-20, callback=None, options={'disp':True})
+		# print(res)
+	
+		# Least square method does not find a good Q fit and the sum of the squares for solution is fairly high
+		# print('Least Square ################# ')
+		# print(fit['Least-Squares'])
+		# print(np.square(fit['Least-Squares'][2]['fvec']).sum()) # this is the value of the sum of the squares for the solution
+		# x = fit['Least-Squares'][0] 
+		
+		#x = res.x 
+		bestfit = list(fit)[0]
+		lowest = fit[bestfit].fun
+		for key in fit.keys(): 
+			if fit[key].fun < lowest:
+				lowest = fit[key].fun
+				bestfit = key
+
+		return s21_fit, Teq_m, Teq_p,geq, fit[bestfit].x
+		#self.Sweep_Array[index]['S21']
+
+	def fit_system_calibration(self):
+		'''compute chebyshev polynomial fits for  gain and noise values.
+		save resulting polynomial coefficients list as:
+		
+		self.metadata.System_Calibration['device'][x + '_fit']
+
+		where x is [gain, Tn_m ,Tn_p]... 
+
+		use numpy.polynomial.chebyshev.chebval to evaluate polynomial
+
+		'''
+		max_degree = 9
+
+		SC = self.metadata.System_Calibration
+		#already_fit = [k + '_fit' for k in SC[key].keys()]
+		
+		# Dont fit 'freq' and 'P1dB' to 'freq'
+		# dont fit specs which *are* fits already
+		dont_fit  = set(['freq','P1dB'])
+		for key in SC.keys():
+			for spec in SC[key].keys():
+				if spec.find('_fit') > -1:
+					dont_fit.add(spec)
+
+		for key in SC.keys():
+			for spec in set(SC[key].keys()).difference(dont_fit): # everything in SC[key] except for dont_fit
+				deg =  min(len(SC[key]['freq']) - 2,max_degree) if len(SC[key]['freq']) >2 else len(SC[key]['freq']) - 1
+				coefs = np.polynomial.chebyshev.chebfit(SC[key]['freq'],  SC[key][spec], deg)
+				#coefs = numpy.polynomial.polynomial.polyfit(SC[key]['freq'],  SC[key]['g'], deg)
+
+				
+				SC[key].update({spec + '_fit':list(coefs)})
+			
+	def fit_cable_loss(self, key_name, freq_range = [400e6, 1e9], Verbose = True, Show_Plot = True):
 		'''produces fit to cable loss in the functional form:
 		term1 + term2 + term3 = a * sqrt(f) + b * f + c
 		term1 is the sum of inner and outer coaxial cable conductor losses
 		term2 is due to coaxial cable dielectric loss
 		term3 is a constant fudge factor
 		The loss evaluates to units of dB.
+
+		stores the  fit as dictionary
+		(a,b,c,run,range_start,range_stop)= self.metadata.Cable_Calibration['One_Way_40mk']
 
 		Two used this function load transmission for complete cable loop only (not amps or attens).
 		Then call this function on that transmission data. This funciton creats the tuple (a,b,c,run,range_start,range_stop) in 
@@ -2060,7 +2507,7 @@ class sweep:
 
 		def obj(x,s21,f):
 			a,b,c = x
-			return np.square(20*np.log10(np.abs(s21)) - a*np.sqrt(f) - b*f - c).sum()	
+			return np.square(20*np.log10(np.abs(s21)) - a*np.sqrt(f) - b*f - c).sum() #attenuation in dB/length goes as -a*sqrt(f)-b*f-c, where c has no theoretical basis.
 		
 		p0 = np.array([-3.0e-4,-1.0e-9 ,0.5])
 
@@ -2069,7 +2516,12 @@ class sweep:
 		k = list(res.x/2.0) #devide by 2 to get one way loss
 		k = k + [self.metadata.Run, f[0], f[-1]]
 
-		self.metadata.Cable_Calibration = self._Cable_Calibration = tuple(k)
+		if self.metadata.Cable_Calibration == None:
+			cal = {}
+			cal[key_name] = tuple(k)
+			self.metadata.Cable_Calibration = self._Cable_Calibration = cal
+		else:
+			self.metadata.Cable_Calibration[key_name] =tuple(k)
 
 		if Verbose == True:
 			print(res)
@@ -2491,6 +2943,7 @@ class sweep:
 										Pinput_dB = Pprobe_dBm[index] - system_attenuation_before_device,
 										Is_Valid = True,
 										Mask = np.zeros(f.shape, dtype=np.bool),
+										Chi_Squared = 0,
 										Fr = cd['f_0'], #Note! we are using the resonance freq of the lowest power S21 for all 
 										Q = Q,
 										Qc = cd['Qc'],

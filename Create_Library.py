@@ -10,19 +10,78 @@ path = '/Users/miguel_daal/Desktop/Some_Data/'
 
 Find_Temperatures = 0
 Cable_Calibration = 1
-Run52b = 0
-Run51a = 0
-Run51b = 0
-Run49a = 0
-Run48a = 0
-Run48b = 0
-Run47a = 0
-Run46a = 0
-Run45b = 0
-Run45a = 0
+Run52b = 1
+Run51a = 1
+Run51b = 1
+Run49a = 1
+Run48a = 1
+Run48b = 1
+Run47a = 1
+Run46a = 1
+Run45b = 1
+Run45a = 1
 Run44b = 1
-Run44a = 0
+Run44a = 1
 
+
+#############
+#
+#
+#       Calibration information for redout devices incl. noise and gain of amplifiers and NA
+#
+#
+#############
+
+System_Calibration = {}
+# Units:
+# F = Hz
+# G = dB
+# Nm = Kelvin amplitude noise
+# Np = Kelvin phase noise
+# P1dB = dBm at input
+
+F = [409600000., 509500000, 609400000, 709300000, 809200000, 909100000, 1009000000]
+G = [48.2976, 48.1631, 48.0342, 47.684, 47.3322, 46.9015, 46.4087]
+Nm = [5.48601,5.72677,5.77245,6.0146,5.94466,5.95258,6.13591]
+Np = Nm
+P1dB = -48.
+System_Calibration['SiGe #2'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
+
+F = [400000000., 500000000, 600000000, 700000000, 800000000, 900000000, 1000000000]
+G = [47.5, 47.3, 47.0, 46.6, 46.0, 45.6, 45.0]
+Nm = [5.7, 6.3, 6.1, 6.3, 6.6, 6.6, 7.0]
+Np = Nm
+P1dB = -48.
+System_Calibration['SiGe #1'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
+
+F = [400000000., 500000000, 600000000, 700000000, 800000000, 900000000, 1000000000]
+G = [31.6958, 31.7332, 33.3491, 34.582, 36.4723, 35.4597, 35.4288]
+Nm = [10.0454, 9.13519, 8.59369, 8.28292, 8.11164, 7.86398, 7.5084]
+Np = Nm
+P1dB = -40.
+System_Calibration['InP #2'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
+
+F = [395000000.,424500000, 454000000, 483500000, 513000000, 542500000, 572000000, 601500000, 631000000, 660500000, 690000000, 719500000, 749000000, 778500000, 808000000, 837500000, 867000000, 896500000, 926000000, 955500000, 985000000]
+Nm = [488.6053076, 489.2697104, 474.3872914, 473.1617407, 467.3813032, 470.0790808, 460.311823, 446.0557503, 439.5120869, 439.2718329, 429.4232912, 423.771945, 414.857644, 419.2513872, 410.1854824, 401.0360685, 398.6567012, 400.5274794, 389.6199922, 390.1977107, 411.6113207]
+G = [ 39.1,  39.1,  39.1,  39. ,  39. ,  39. ,  39. ,  38.9,  38.9, 38.9,  38.8,  38.7,  38.7,  38.6,  38.6,  38.5,  38.4,  38.4, 38.3,  38.2,  38.1]
+Np = Nm
+P1dB = -11.2 # at input
+System_Calibration['AML016P3411'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
+
+F = [3000000., 3000000000]
+G = [1.,1]
+Nm = [120743991885170.77,120743991885170.77]#rms Peak Voltage Noise
+Np = Nm
+P1dB = +20. # Fault power level. 
+System_Calibration['NA']  = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
+
+#############
+#
+#
+#       Impedance, width, and Eeff data  for resonators
+#
+#
+#############
 sensor_ids = np.array(['S1','S2','S3','S4','S5','S6','S7','S8','S9','S10','S11','S12','S13','S14','S15','S16'])
 Z3 = np.array([85.7779239,	67.8250245,	50.1762772,	33.824545,	21.2469277,	12.7273743,	7.18826586,	3.5793348,	78.4335348,	61.6228064,	45.6375047,	31.5852207,	20.407557,	12.372514,	7.10001542,	3.89603542])
 Z3_dict_1 = dict(zip(sensor_ids,Z3))
@@ -37,7 +96,16 @@ ground_plane_wafer = np.array(['DSAT3','DSAT4','DSAT5','DSAT6','DSAT7','GSAT1', 
 ground_plane_wafer_thickness = np.array([348.0,	309.0,	309.0,	164.0,	85.0,	305.5,	265.33])
 gp_thickness_dict_1 = dict(zip(ground_plane_wafer,ground_plane_wafer_thickness))
 
-def _set_metadata(Z1_dict,Z3_dict,Eeff_dict,gp_thickness_dict):
+
+#############
+#
+#
+#       Code for connecting impedance, width, and Eeff  and readout calibration data to data sets
+#
+#
+#############
+
+def _set_metadata(Z1_dict,Z3_dict,Eeff_dict,gp_thickness_dict,System_Calibration):
 	def _extract_wafer_label(string_input):
 		'''returns first word in string for which all cased characters are upper case are AND for which the word is entirely 
 		alpha numeric (no '-', '(', etc) AND for which word is >= 4 characters. returns warning if there are two matches or no matches.
@@ -101,22 +169,41 @@ def _set_metadata(Z1_dict,Z3_dict,Eeff_dict,gp_thickness_dict):
 	swp.metadata.Resonator_Eeff = Eeff_dict[sid] # Resonator Dielectric Constant
 	swp.metadata.Feedline_Impedance = Z1_dict[sid] #in ohms
 	swp.metadata.Ground_Plane_Thickness = gp_thickness_dict[gid]*1e-9 #in meters
+	swp.metadata.System_Calibration = System_Calibration
+	swp.fit_system_calibration()
+	swp.metadata.Digitizer = 'NA'
 
 if Cable_Calibration:
 	filename = path + 'Calibrations/Cables_140520/Channel_1_Coax_2_50mK_KIDs_Run_50a_ScanData_37mK_2014520183338_Fixed20140625.mat'
 	swp.load_scandata(filename)
 	index = 1 
 	swp.pick_loop(index)
-	swp.fit_cable_loss(freq_range = [400e6, 1e9], Verbose = False, Show_Plot = False)
-
-
+	swp.fit_cable_loss('One_Way_40mK',freq_range = [400e6, 1e9], Verbose = False, Show_Plot = False)
+	filename = path + 'Calibrations/Cables_111016/Channel_2_4K/Channel 2 4K_ScanData_300000mK_2011101616135.mat'
+	swp.load_scandata(filename)
+	index = 0 
+	swp.pick_loop(index)
+	swp.fit_cable_loss('One_Way_4K',freq_range = [400e6, 1e9], Verbose = False, Show_Plot = False)
+	filename = path + 'Calibrations/Cables_110908/Flexible_Coax_Loop_300K/Full Loop_ScanData_300000mK_20119812370.mat'
+	swp.load_scandata(filename)
+	index = 0 
+	swp.pick_loop(index)
+	swp.fit_cable_loss('One_Way_300K',freq_range = [400e6, 1e9], Verbose = False, Show_Plot = False)
+	swp.metadata.Cable_Calibration['300K_to_4K'] = (swp.metadata.Cable_Calibration['One_Way_4K'][0]  - swp.metadata.Cable_Calibration['One_Way_300K'][0],
+													swp.metadata.Cable_Calibration['One_Way_4K'][1]  - swp.metadata.Cable_Calibration['One_Way_300K'][1], 
+													swp.metadata.Cable_Calibration['One_Way_4K'][2]  - swp.metadata.Cable_Calibration['One_Way_300K'][2],
+													'One_Way_4K - One_Way_300K', 400995077.27409261, 998491719.05006254)
+	swp.metadata.Cable_Calibration['4K_to_40mK'] = (swp.metadata.Cable_Calibration['One_Way_40mK'][0]  - swp.metadata.Cable_Calibration['One_Way_4K'][0],
+													swp.metadata.Cable_Calibration['One_Way_40mK'][1]  - swp.metadata.Cable_Calibration['One_Way_4K'][1],
+													swp.metadata.Cable_Calibration['One_Way_40mK'][2]  - swp.metadata.Cable_Calibration['One_Way_4K'][2],
+													'One_Way_40mK - One_Way_4K', 400995077.27409261, 998491719.05006254)
 
 if Run52b: #256 um resonator (S8) on hex ground plane
 	if 1:	#Survey Sweep  - Low Freq
 		filename = path + 'Run52b/Survey/Low_Frequency_Survey/52b_ScanData_37mK_201531123136.mat'
 		swp.load_scandata(filename)
 		swp.metadata.Num_Temperatures  = 0 #Measured temps are no good bc forgot to set thermometer bias
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -124,35 +211,36 @@ if Run52b: #256 um resonator (S8) on hex ground plane
 	if 1:	#Survey Sweep  - High Freq - cannot see fundamental, only first harmonic
 		filename = path + 'Run52b/Survey/52b_ScanData_42mK_201522705010.mat'
 		swp.load_scandata(filename)
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
+		swp.metadata.System_Calibration = System_Calibration
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
 		swp.save_hf5(overwrite = True)		
 	if 1:	#TP Sweep - 1st Harmonic Low Power, decreasing temp 
 		filename = path + 'Run52b/TP_Sweep/844MHz_Resonance/Low_Power_Sweep/52b_ScanData_40mK_20153405551.mat'	
 		swp.load_scandata(filename)
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)	
 	if 1:	#TP Sweep - 1st Harmonic high Power, decreasing temp
 		filename = path + 'Run52b/TP_Sweep/844MHz_Resonance/High_Power_Sweep/52b_ScanData_40mK_20153518447.mat'	
 		swp.load_scandata(filename)
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)	
 	if 1:	#TP Sweep - 1st Harmonic downward, low & high power, increasing temp
 		filename = path + 'Run52b/TP_Sweep/844MHz_Resonance/Upward_Temp_Sweep/52b_ScanData_39mK_2015311192843.mat'	
 		swp.load_scandata(filename)
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)	
 	if 1:	#TP Sweep - Fundamental Harmonic downward, low & high power, decreasing temp
 		filename = path + 'Run52b/TP_Sweep/423MHz_Resonance/52b_ScanData_Merged_40mK_20150315.mat'	
 		swp.load_scandata(filename)
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -160,14 +248,14 @@ if Run52b: #256 um resonator (S8) on hex ground plane
 		filename = path + 'Run52b/P_Sweep/423MHz_Resonance/52b_ScanData_39mK_2015312102455.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.Num_Temperatures  = 0 #Measured temps are no good bc forgot to set thermometer bias
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
 	if 1: 	#P Sweep - first harmonic
 		filename = path + 'Run52b/P_Sweep/844MHz_Resonance/52b_ScanData_39mK_20153417229.mat'	
 		swp.load_scandata(filename)
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)		
@@ -179,7 +267,7 @@ if Run51b: #listed at 32um wide should be 16um, listed at sensor wafer FHN2, sho
 		filename = path + 'Run51b/Survey/51b_ScanData_42mK_2014111721582.mat'
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S12 FHN1 (16um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -188,7 +276,7 @@ if Run51b: #listed at 32um wide should be 16um, listed at sensor wafer FHN2, sho
 		filename = path + 'Run51b/TP_Sweep/51b_ScanData_Merged_42mK_20141128.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S12 FHN1 (16um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)	
@@ -196,7 +284,7 @@ if Run51b: #listed at 32um wide should be 16um, listed at sensor wafer FHN2, sho
 		filename = path + 'Run51b/P_Sweep/51b_ScanData_41mK_2014111851960.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S12 FHN1 (16um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)	
@@ -206,7 +294,7 @@ if Run51a: #isted at sensor wafer FHN2, should be FHN1
 		filename = path + 'Run51a/Survey/51a_ScanData_45mK_20141116201531.mat'
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S5 FHN1 (32um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -215,7 +303,7 @@ if Run51a: #isted at sensor wafer FHN2, should be FHN1
 		filename = path + 'Run51a/TP_Sweep/51a_ScanData_41mK_2014112663253.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S5 FHN1 (32um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)	
@@ -223,7 +311,7 @@ if Run51a: #isted at sensor wafer FHN2, should be FHN1
 		filename = path + 'Run51a/P_Sweep/51a_ScanData_44mK_2014111702433.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S5 FHN1 (32um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)	
@@ -239,7 +327,8 @@ if Run49a: #Listed at FHN4 change to FHN2!
 		filename = path + 'Run49a/Survey/49a_ScanData_45mK_2014417175147.mat'
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S2 FHN2 (4um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		swp.metadata.LNA['LNA'] =  'SiGe #1'
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -249,7 +338,8 @@ if Run49a: #Listed at FHN4 change to FHN2!
 		filename = path + 'Run49a/TP_Sweep/49a_ScanData_45mK_2014420142743.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S2 FHN2 (4um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		swp.metadata.LNA['LNA'] =  'SiGe #1'
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -258,7 +348,8 @@ if Run49a: #Listed at FHN4 change to FHN2!
 		filename = path + 'Run49a/P_Sweep/49a_ScanData_45mK_201442443323.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S2 FHN2 (4um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		swp.metadata.LNA['LNA'] =  'SiGe #1'
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -274,7 +365,8 @@ if Run48a:
 		filename = path + 'Run48a/Survey/48a_ScanData_50mK_2014331143139.mat'
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S3 FHN1 (8um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		swp.metadata.LNA['LNA'] =  'SiGe #1'
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -285,7 +377,8 @@ if Run48a:
 		swp.load_scandata(filename)
 		swp.Sweep_Array['Pinput_dB'] = np.round(swp.Sweep_Array['Pinput_dB']) #NA Rounding Error not fixed yet
 		swp.metadata.Sensor = 'S3 FHN1 (8um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		swp.metadata.LNA['LNA'] =  'SiGe #1'
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -294,7 +387,8 @@ if Run48a:
 		filename = path + 'Run48a/P_Sweep/48a_ScanData_45mK_201433112722.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S3 FHN1 (8um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		swp.metadata.LNA['LNA'] =  'SiGe #1'
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -311,7 +405,7 @@ if Run48b:
 		filename = path + 'Run48b/Survey/48b_ScanData_45mK_201441123255.mat'
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S5 FHN1 (32um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -321,7 +415,7 @@ if Run48b:
 		filename = path + 'Run48b/TP_Sweep/48b_ScanData_45mK_201441101927.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S5 FHN1 (32um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -330,7 +424,7 @@ if Run48b:
 		filename = path + 'Run48b/P_Sweep/48b_ScanData_45mK_201441132117.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.Sensor = 'S5 FHN1 (32um width)'
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -339,7 +433,7 @@ if Run47a: #this run failed
 	if 1:	#Survey Sweep 
 		filename = path + 'Run47a/Survey/47a_ScanData_50mK_20143234307.mat'
 		swp.load_scandata(filename)
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -359,7 +453,7 @@ if Run46a:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -374,7 +468,7 @@ if Run46a:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -388,7 +482,7 @@ if Run46a:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 20
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -413,7 +507,7 @@ if Run46a:
 		swp.Sweep_Array[ind:] = Sweep_Array_500mV_to_200mV
 		ind = swp.Sweep_Array.size- Sweep_Array_100mV_to_000mV.size
 		swp.Sweep_Array[ind:] = Sweep_Array_100mV_to_000mV
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -428,7 +522,7 @@ if Run45b: # Had gross Microphonics
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay(Show_Plot = False, Verbose = True, center_freq = None, Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -443,7 +537,7 @@ if Run45b: # Had gross Microphonics
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 10
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -457,7 +551,7 @@ if Run45b: # Had gross Microphonics
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -485,7 +579,7 @@ if Run45a:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay(Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -507,7 +601,7 @@ if Run45a:
 		for rec in swp.Sweep_Array:
 			if rec['Heater_Voltage'] == 0.5:
 				rec['Is_Valid'] = False
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -521,7 +615,7 @@ if Run45a:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 10
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -535,7 +629,7 @@ if Run45a:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -559,7 +653,7 @@ if Run44b:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -574,12 +668,12 @@ if Run44b:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
 
-	if 0: #P Sweep 
+	if 1: #P Sweep 
 		filename = path + 'Run44b/P_Sweep/44b_ScanData_60mK_2013121105756.mat'	
 		swp.load_scandata(filename)
 		swp.metadata.LNA['LNA'] = 'SiGe #1'
@@ -591,7 +685,7 @@ if Run44b:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -616,7 +710,7 @@ if Run44a:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.pick_loop(0)
 		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
@@ -631,7 +725,7 @@ if Run44a:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
@@ -648,7 +742,7 @@ if Run44a:
 		swp.metadata.Atten_NA_Input = 0
 		swp.metadata.Atten_RTAmp_Input = 0
 		swp.metadata.RTAmp_In_Use = 1
-		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
