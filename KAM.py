@@ -359,12 +359,19 @@ class sweep:
 			return
 
 
-		fig = plt.figure( figsize=(8, 6), dpi=100)
+		fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
 		ax = fig.add_subplot(111,aspect=aspect)
-		line = ax.plot(z.real,z.imag,'bo')
-		ax.set_xlabel('I [Volts]')
-		ax.set_ylabel('Q [Volts]')
+		line, = ax.plot(z.real,z.imag,'bo')
+		ax.set_xlabel(r'$\Re[S_{21}(f)]$')
+		ax.set_ylabel(r'$\Im[S_{21}(f)]$')
+		ax.yaxis.labelpad = -2
 		ax.set_title('Run: {0}; Sensor: {1}; Ground: {2}; Record Date: {3}'.format(self.metadata.Run, self.metadata.Sensor, self.metadata.Ground_Plane, self.metadata.Time_Created),fontsize=10)
+		
+
+
+
+
+
 		if show == True:
 			plt.show()
 		return  (fig, ax, line)
@@ -821,16 +828,16 @@ class sweep:
 		# #determine type of  measurement...
 		# if  (self.Sweep_Array.size == 1) | (np.abs(self.Sweep_Array['Fstop'] - self.Sweep_Array['Fstart']).max() >= 100e6):
 		# 	groupname = 'Survey'
-		# elif (np.unique(swp.Sweep_Array['Heater_Voltage']).size > 1) && (np.unique(swp.Sweep_Array['Pinput_dB']).size == 1):
+		# elif (np.unique(self.Sweep_Array['Heater_Voltage']).size > 1) && (np.unique(self.Sweep_Array['Pinput_dB']).size == 1):
 		# 	groupname = 'T_Sweep'
-		# elif (np.unique(swp.Sweep_Array['Heater_Voltage']).size == 1) && (np.unique(swp.Sweep_Array['Pinput_dB']).size > 1):
+		# elif (np.unique(self.Sweep_Array['Heater_Voltage']).size == 1) && (np.unique(self.Sweep_Array['Pinput_dB']).size > 1):
 		# 	groupname = 'P_Sweep'
-		# elif (np.unique(swp.Sweep_Array['Heater_Voltage']).size > 1) && (np.unique(swp.Sweep_Array['Pinput_dB']).size > 1):
+		# elif (np.unique(self.Sweep_Array['Heater_Voltage']).size > 1) && (np.unique(self.Sweep_Array['Pinput_dB']).size > 1):
 		# 	groupname = 'TP_Sweep'
 		# else:
 		# 	groupname = 'Sweep'
 
-		# 	groupname = 'T' + str(np.unique(swp.Sweep_Array['Heater_Voltage']).size) + 'P' +  str(np.unique(swp.Sweep_Array['Pinput_dB']).size)	
+		# 	groupname = 'T' + str(np.unique(self.Sweep_Array['Heater_Voltage']).size) + 'P' +  str(np.unique(self.Sweep_Array['Pinput_dB']).size)	
 
 	def decompress_gain(self, Compression_Calibration_Index = -1, Show_Plot = True, Verbose = True):
 		''' Assumes the two lowest input powers of the power sweep are not gain compressed, thus
@@ -1004,7 +1011,7 @@ class sweep:
 		print(TOC)
 
 	def load_hf5(self, tablepath, filename = database_location):
-		''' table path is path to the database to be loaded starting from root. e.g. swp.load_hf5('/Run44b/T201312102229')
+		''' table path is path to the database to be loaded starting from root. e.g. self.load_hf5('/Run44b/T201312102229')
 		filename is the name of the hf5 database to be accessed for the  table informaiton'''
 
 		if not os.path.isfile(filename):
@@ -1959,8 +1966,8 @@ class sweep:
 			# 	ax[k].tick_params(axis='x', labelsize=5)
 			# plt.show()
 
-	def fill_sweep_array(self, Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False ):
-		Complete_Fit = True
+	def fill_sweep_array(self, Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = True ):
+		
 
 		if Compute_Preadout == True:
 			needed = ('Atten_NA_Output', 'Atten_At_4K','Cable_Calibration')
@@ -2048,7 +2055,7 @@ class sweep:
 													cFr = self.loop.cfr,
 													cPhi = self.loop.cphi,
 													cChi_Squared = self.loop.cchisquare,
-													cIs_Valid = self.cphase_fit_success if self.Sweep_Array['Is_Valid'][index] else self.Sweep_Array['Is_Valid'][index])
+													cIs_Valid = self.loop.cphase_fit_success if self.Sweep_Array['Is_Valid'][index] else self.Sweep_Array['Is_Valid'][index])
 												
 
 
@@ -2083,17 +2090,15 @@ class sweep:
 		print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
 	
 	
-	def complete_fit(self):
+	def complete_fit(self, Use_Mask = True, Verbose = False , Show_Plot = False, Save_Fig = True):
 		k = constants.value('Boltzmann constant') #unit is [J/k]
 		BW = self.metadata.IFBW #unit is [Hz]	 
 		SC = self.metadata.System_Calibration # contains Noise powers, gains and P1dB of readout devices
-		CC = self.metadata.Cable_Calibration
-		self.metadata.RTAmp = 'AML016P3411'
+		CC = self.metadata.Cable_Calibration # cable loss fit coefficients
 		
-		R = 50
-		j = np.complex(0,1)
-
-		Use_Mask = True
+		
+		R = 50 #system impedance
+		
 
 		if Use_Mask:
 			F = ma.array(self.Sweep_Array[self.loop.index]['Frequencies'],mask = self.Sweep_Array[self.loop.index]['Mask'])
@@ -2103,28 +2108,15 @@ class sweep:
 		else:
 			F = self.Sweep_Array[self.loop.index]['Frequencies']
 			S21 = self.Sweep_Array[self.loop.index]['S21']
-		#g = lambda dB: np.power(10.0,dB/10.0)
+
 
 		Fit_Method = 'Multiple'
 		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
 		   Fit_Method={Fit_Method}
 
-		# cable_order = ['300K_to_4K', 'One_Way_300K'] #['4K_to_40mK', '300K_to_4K', 'One_Way_300K'] # first , second, third cable stretches
-		# cable_temp =  [(290.+4.)/2, 290]#[4.2, (290.+4.)/2, 290]
 
-		
-		# cable_g = []
-		# cable_Tn = []
-		# for i in xrange(len(cable_order)):
-		# 	g = CC[cable_order[i]][0]*np.sqrt(F)+CC[cable_order[i]][1]*F+CC[cable_order[i]][2]
-		# 	g = np.power(10.0,g/10.0)
-		# 	cable_g.append(g)
-		# 	Tn = ((1.0/g)-1)*cable_temp[i]
-		# 	cable_Tn.append(Tn)
-
-		
-
-
+	
+		# Chain is the string of readout cables and amplifiers/devices
 		chain  = []
 		if self.metadata.LNA['LNA'] is not None:
 			chain.append(self.metadata.LNA['LNA'])
@@ -2163,9 +2155,7 @@ class sweep:
 			# warn me if the component is missing from calibration data
 			print('Component not found in calibration data!!')
 			1/0
-		print chain
-		print g_s
-		print len(g_s)
+
 		Tn_p_tot = np.zeros_like(F)
 		Tn_m_tot = np.zeros_like(F)
 		g_tot  = np.prod(g_s, axis = 0)
@@ -2173,13 +2163,8 @@ class sweep:
 			Tn_p_tot = Tn_p_tot +  Tn_p_s[i]/np.prod(g_s[:i], axis = 0)
 			Tn_m_tot = Tn_m_tot +  Tn_m_s[i]/np.prod(g_s[:i], axis = 0)
 
-		print Tn_m_tot
-		print g_tot
-
-
 		sigma_squared_m = 4.0*k*R*g_tot*self.metadata.IFBW* Tn_m_tot
 		sigma_squared_p = 4.0*k*R*g_tot*self.metadata.IFBW* Tn_p_tot
-		print sigma_squared_m
 
 
 		a_0,b_0  = self.loop.a, self.loop.b
@@ -2194,7 +2179,7 @@ class sweep:
 
 		def obj(x,s21, sigma_squared_m,sigma_squared_p ,freq):
 			a,b,tau,Q, Qc, fr, phi= x
-			s21_fit  = self.loop.normalization * np.exp(np.complex(0.,self._angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+			s21_fit  = self.loop.normalization * np.exp(np.complex(0.,np.angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
 			diff = s21 - s21_fit
 			frac = (diff*diff.conj()).real/sigma_squared_m
 			#frac = (np.square(diff.real)/sigma_squared_m) + (np.square(diff.imag)/sigma_squared_m) 
@@ -2225,22 +2210,11 @@ class sweep:
 		else:
 		   print("Unrecognized fit method data type. Aborting fit. \n\t Please specify using a string or a set of strings from one of {0} or 'Multiple'".format(fit_func.keys()))
 		   return	         	   
-		               				
-		for method in fit.keys():
-			print('\n{0} Minimzation Result:\n{1}\n'.format(method,fit[method]))
-		#Does not work if the objective function is re-arranged as in the following
-		# print('Nelder-Mead 2 ################# ')
-		# def obj(x,z_theta,f):
-		# 	theta,fr,Q = x
-		# 	return np.square(np.tan((z_theta - theta)/2) - (2.0*Q*(1-f/fr))).sum()
-		# res = minimize(obj, p0, args=(z_theta,f), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-20, callback=None, options={'disp':True})
-		# print(res)
-	
-		# Least square method does not find a good Q fit and the sum of the squares for solution is fairly high
-		# print('Least Square ################# ')
-		# print(fit['Least-Squares'])
-		# print(np.square(fit['Least-Squares'][2]['fvec']).sum()) # this is the value of the sum of the squares for the solution
-		# x = fit['Least-Squares'][0] 
+		
+		if Verbose:        				
+			for method in fit.keys():
+				print('\n{0} Minimzation Result:\n{1}\n'.format(method,fit[method]))
+
 		
 		#x = res.x 
 		bestfit = list(fit)[0]
@@ -2250,25 +2224,45 @@ class sweep:
 				lowest = fit[key].fun
 				bestfit = key
 
-
-		self.cQ = fit[bestfit].x[3]	
-		self.cQc = fit[bestfit].x[4]	
-		self.cQi = 1.0/ ((1./self.Q ) - (1./self.cQc ))
-		self.cfr = fit[bestfit].x[5]	
-		#self.FWHM = None
-		self.cphi = fit[bestfit].x[5]	
-		self.cchisquare = fit[bestfit].fun
-		#self.pvalue = None
-		#self.phase_fit_method = None
-		self.cphase_fit_success = fit[bestfit].success
-		#self.phase_fit_z = None
-		#self.phase_fit_mask = None
+		ca, cb, ctau = fit[bestfit].x[0], fit[bestfit].x[1], fit[bestfit].x[2]
+		self.loop.cQ = cQ = fit[bestfit].x[3]	
+		self.loop.cQc = cQc = fit[bestfit].x[4]	
+		self.loop.cQi = cQi = 1.0/ ((1./self.loop.cQ ) - (1./self.loop.cQc ))
+		self.loop.cfr = cfr = fit[bestfit].x[5]	
+		self.loop.cphi = cphi =  fit[bestfit].x[6]	
+		self.loop.cchisquare = fit[bestfit].fun
+		self.loop.cphase_fit_success = fit[bestfit].success
 
 
+	
+
+
+		if  Show_Plot:
+
+			fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
+			ax = fig.add_subplot(111,aspect='equal')
+			line = ax.plot(S21.real,S21.imag,'bo', label = 'Raw Data')
+
+
+			n = self.loop.normalization
+			s21_stepwise  = n * np.exp(np.complex(0.,np.angle(np.complex(a_0,b_0)))) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,-phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
+			line = ax.plot(s21_stepwise.real,s21_stepwise.imag,'ro', label = 'Stepwise Fit')
+
+			s21_concurrent = n * np.exp(np.complex(0.,np.angle(np.complex(ca,cb)))) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,-cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
+			line = ax.plot(s21_concurrent.real,s21_concurrent.imag,'go', label = 'Concurrent Fit')
+
+
+			ax.set_xlabel(r'$\Re[S_{21}(f)]$')
+			ax.set_ylabel(r'$\Im[S_{21}(f)]$')
+			ax.yaxis.labelpad = -2
+
+			ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
+			if Save_Fig == True:
+				fig.savefig('Loop_Run_{0}_Index_{1}'.format(self.metadata.Run, self.loop.index), dpi = 300, transparency  = True)
+
+			plt.show()
 
 		return fit[bestfit].x
-
-
 
 
 	def _angle(self, z, deg = 0):
@@ -2537,7 +2531,12 @@ class sweep:
 			ax.legend(loc = 'best', fontsize=10,scatterpoints =1, numpoints = 1, labelspacing = .1)
 			plt.show()
 
-	def nonlinear_fit(self, Fit_Method = 'Multiple', Verbose = True, Show_Plot = True):
+	def nonlinear_fit(self, Fit_Method = 'Multiple', Verbose = True, Show_Plot = True, Save_Fig = False, Indexing = (None,None,None)):
+		'''
+		The indexing keyword allows for selection of the power sweep to be fit. 
+		If P is the list of powers then Indexing = (Start,Stop,Step) is using only, P[Start,Stop, Step]
+		'''
+
 		from scipy.stats import chisquare
 		import time
 		
@@ -2545,7 +2544,11 @@ class sweep:
 		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
 		   Fit_Method={Fit_Method}
 
-	
+		if self.loop.index == None:
+			print('Loop index not chosen. Setting to 0.')
+			index = 0
+			self.pick_loop(index)
+
 		Sweep_Array_Record_Index = self.loop.index 
 		V = self.Sweep_Array['Heater_Voltage'][Sweep_Array_Record_Index]
 		Fs = self.Sweep_Array['Fstart'][Sweep_Array_Record_Index]
@@ -2566,7 +2569,8 @@ class sweep:
 
 		power_sweep_list = []
 		invalid_power_sweep_list = []
-		for index in indices: #
+		start, stop, step = Indexing
+		for index in indices[start:stop:step]: #
 			# Clear out loop
 			del(self.loop)
 			self.loop = loop()
@@ -2662,7 +2666,7 @@ class sweep:
 		
 		finished = time.time()
 		elapsed = (finished - start )/60.0 #minutes
-		print 'Minimization took {} minutes'.format(elapsed)
+		print 'Minimization took {:.2f} minutes'.format(elapsed)
 		
 
 		if fit.keys() != []: #if there is a fit object in the fit dictionary
@@ -2705,20 +2709,20 @@ class sweep:
 				a,b,phi,tau = p[6:]
 				vline = ax[1].axvline(x = (parameter_dict['f_0']-fr)/fr,linewidth=1, color='y', linestyle = ':')#,   label = r'$f_{r}$')
 				note = note + (r'$f_0$ = {f_0:3.2e} Hz, $Q_{sub1}$ = {Qtl:3.2e}, $Q_c$ = {Qc:3.2e}' +
-					'\n' + r'$\phi_{sub2}$ = {ang:3.2f} deg, ${l1}$ = {et:3.2e}, ${l2}$ = {de:3.2e}').format(
+					'\n' + r'$\phi_{sub2}$ = {ang:3.2f}$^\circ$, ${l1}$ = {et:3.2e}, ${l2}$ = {de:3.2e}').format(
 					nl = '\n', et = parameter_dict['eta']/parameter_dict['V30V30'],
 					de = parameter_dict['delta']/parameter_dict['V30V30'], 
 					l1 = r'{\eta}/{V_{3,0}^2}',
 					l2  = r'{\delta}/{V_{3,0}^2}',
 					ang = parameter_dict['phi31']*180/np.pi, 
-					sub1 = '{tl}', sub2 = '{31}',**parameter_dict)
+					sub1 = '{i}', sub2 = '{31}',**parameter_dict)
 						
 
 			for sweep in power_sweep_list:
 				V1exp, S21exp, f = sweep
 				Pexp = 10*np.log10(V1exp*V1exp/(2 *Zfl*0.001))
 				dff = (f - fr)/fr
-				curve = ax[1].plot(dff,10*np.log10(np.abs(S21exp)),label = '{:3.0f} dBm'.format(Pexp))
+				curve = ax[1].plot(dff,20*np.log10(np.abs(S21exp)),label = '{:3.2f} dBm'.format(Pexp)) # Pexp is Preadout
 				curve = ax[2].plot(S21exp.real,S21exp.imag)
 
 					
@@ -2748,22 +2752,23 @@ class sweep:
 					S21_cor = np.complex(a,b)+ np.exp(np.complex(0,phi)+ np.complex(0,2.0*np.pi*tau)*f)*S21exp
 					V3_cor  = fd['V3'](S21_cor,V1exp)
 
-					curve = ax[1].plot(dff,10*np.log10(np.abs(S21_fit)), linestyle = ':', color = 'c')
+					curve = ax[1].plot(dff,20*np.log10(np.abs(S21_fit)), linestyle = ':', color = 'c')
 					curve = ax[2].plot(S21_fit.real,S21_fit.imag, linestyle = ':', color = 'c') 
 					
 					# curve = ax[3].plot(dff.real,V3_cor.real)
 					# curve = ax[3].plot(dff.real,V3_cubic.real, linestyle = ':', color = 'g')
 					
 
-					curve = ax[3].plot(dff,V3_exp.real)
-					curve = ax[3].plot(dff.real,V3_fit.real, linestyle = ':', color = 'c')#~np.iscomplex(V3fit)
+					# curve = ax[3].plot(dff,V3_exp.real)
+					# curve = ax[3].plot(dff.real,V3_fit.real, linestyle = ':', color = 'c')#~np.iscomplex(V3fit)
 					
-
+					curve = ax[3].plot(dff,np.abs(V3_exp))
+					curve = ax[3].plot(dff.real,np.abs(V3_fit), linestyle = ':', color = 'c')
 				
 			ax[1].set_title('Mag Transmission')
 			ax[1].set_xlabel(r'$\delta f_0 / f_0$', color='k')
-			ax[1].set_ylabel(r'|$S_{21}$| [dB]', color='k')
-			ax[1].yaxis.labelpad = -4
+			ax[1].set_ylabel(r'$20 \cdot \log_{10}|S_{21}|$ [dB]', color='k') 
+			ax[1].yaxis.labelpad = 0 #-6
 			ax[1].ticklabel_format(axis='x', style='sci',scilimits = (0,0), useOffset=True)
 			ax[1].text(0.01, 0.01, note,
 				verticalalignment='bottom', horizontalalignment='left',
@@ -2774,7 +2779,7 @@ class sweep:
 			ax[2].set_title('Resonance Loop')
 			ax[2].set_xlabel(r'$\Re$[$S_{21}$]', color='k')
 			ax[2].set_ylabel(r'$\Im$[$S_{21}$]', color='k')
-			ax[2].yaxis.labelpad = -8
+			ax[2].yaxis.labelpad = -4
 			ax[2].ticklabel_format(axis='x', style='sci',scilimits = (0,0),useOffset=False)
 
 			ax[3].set_title('Resonator Amplitude')
@@ -2785,14 +2790,19 @@ class sweep:
 				ax[k].tick_params(axis='y', labelsize=6)
 				ax[k].tick_params(axis='x', labelsize=6)
 
-			plt.subplots_adjust(left=.1, bottom=.1, right=None, top=.9 ,wspace=.35, hspace=.3)
+			plt.subplots_adjust(left=.1, bottom=.1, right=None ,wspace=.35, hspace=.3)
+			
+			if Save_Fig == True:
+				file_name = 'Nonlinear_Fit_' + self.metadata.Run + '_Start_Index_' + str(Sweep_Array_Record_Index)
+				fig.savefig(file_name,dpi=300, transparency  = True)
+			
+			plt.subplots_adjust(top =0.90)
 			plt.suptitle('Fit to Nonlinear Resonator Data', fontweight='bold')
-			fig.savefig('Plot',dpi=300, transparency  = True)
 			plt.show()
  
 
-
-		return fit
+ 		fit.update(phiV1= phiV1, V30V30= V30V30)
+		return fit, fig, ax #need to figure out a way to return all the curves too
 
 	def _nonlinear_formulae(self, parameter_dict, model = 2):
 		''' model 2 is paramterization based on input resonator amplitude V_3^-, e.g.: 
@@ -2801,7 +2811,7 @@ class sweep:
 		d = parameter_dict
 		k = {	'z1'     :  lambda f      : d['eta']/(d['Qtl']*d['V30V30']) + np.complex(0,1.0)*(2*d['delta']*f)/(d['V30V30']*d['f_0']),
 				'z2'     :  lambda f      : (1.0/d['Qc']) + (1.0/d['Qtl']) + np.complex(0,2.0) *(f-d['f_0'])/d['f_0'],
-				'z3'     :  lambda V1     : np.sqrt(d['Zres']/(np.pi * d['Qc'] *d['Zfl'])) * np.exp(np.complex(0,d['phi31'])) * V1 *  np.exp(np.complex(0,d['phiV1'])),
+				'z3'     :  lambda V1     : np.sqrt(np.complex(1,0)*d['Zres']/(np.pi * d['Qc'] *d['Zfl'])) * np.exp(np.complex(0,d['phi31'])) * V1 *  np.exp(np.complex(0,d['phiV1'])),
 				'z1z1'   :  lambda f      : (k['z1'](f) * k['z1'](f).conjugate()).real,
 				'z2z2'   :  lambda f      : (k['z2'](f) * k['z2'](f).conjugate()).real,
 				'z3z3'   :  lambda V1     : (k['z3'](V1) * k['z3'](V1).conjugate()).real,
@@ -2843,13 +2853,13 @@ class sweep:
 		del(self.loop)
 		self.loop = loop()
 
-		default_index = 0
+		
 		self.metadata.Electrical_Delay = 0.0
 		self.metadata.Feedline_Impedance = cd['Zfl']
 		self.metadata.Resonator_Impedance = cd['Zres']
 		self.metadata.Time_Created =     '05/01/2015 12:00:00' # or the current datetime datetime.datetime.now().strftime('%m/%d/%Y %H:%M:%S')
 		self.metadata.Run = sd['Run']
-		self.pick_loop(default_index)
+
 
 
 		Q = 1.0/ ((1.0/cd['Qtl']) + (1.0/cd['Qc']))
@@ -2883,8 +2893,7 @@ class sweep:
 			f_minus = -f_plus[:0:-1] + 2*cd['f_0']
 			f = np.hstack((f_minus,f_plus))
 		
-
-		#################### Initialize Arrays
+		#################### Initialize Arrays		
 		Number_of_Roots = 3
 		V3V3 = np.ma.empty((f.shape[0],Number_of_Roots), dtype = np.complex128)
 
@@ -2950,7 +2959,7 @@ class sweep:
 										Heater_Voltage = 0.0
 										)
 
-			curve = ax[1].plot(dff,np.abs(S21), linestyle = '-')
+			curve = ax[1].plot(dff,20*np.log10(np.abs(S21)), linestyle = '-', label = '{0:.2f} dBm'.format(Pprobe_dBm[index]))
 			
 
 		################ Configure Plot
@@ -2959,7 +2968,7 @@ class sweep:
 		ax[1].set_ylabel(r'Mag[$S_{21}$]', color='k')
 		ax[1].yaxis.labelpad = -4
 		ax[1].ticklabel_format(axis='x', style='sci',scilimits = (0,0), useOffset=True)
-
+		ax[1].legend(loc = 'right', fontsize=4,scatterpoints =1, numpoints = 1, labelspacing = .1)
 		for k in ax.keys():
 			ax[k].tick_params(axis='y', labelsize=9)
 			ax[k].tick_params(axis='x', labelsize=5)
@@ -2968,6 +2977,11 @@ class sweep:
 		#plt.subplots_adjust(left=.1, bottom=.1, right=None, top=.95 ,wspace=.4, hspace=.4)
 		plt.suptitle('Nonlinear Resonator Plots')
 		plt.show()
+
+		default_index = 0
+		self.pick_loop(default_index)
+
+		return fig, ax
 
 
 

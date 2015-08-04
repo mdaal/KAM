@@ -70,7 +70,7 @@ System_Calibration['AML016P3411'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= 
 
 F = [3000000., 3000000000]
 G = [1.,1]
-Nm = [120743991885170.77,120743991885170.77]#rms Peak Voltage Noise
+Nm = [2.7e12,2.7e12] #[120743991885170.77,120743991885170.77]#rms Peak Voltage Noise
 Np = Nm
 P1dB = +20. # Fault power level. 
 System_Calibration['NA']  = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
@@ -172,6 +172,7 @@ def _set_metadata(Z1_dict,Z3_dict,Eeff_dict,gp_thickness_dict,System_Calibration
 	swp.metadata.System_Calibration = System_Calibration
 	swp.fit_system_calibration()
 	swp.metadata.Digitizer = 'NA'
+	swp.metadata.RTAmp = 'AML016P3411'
 
 if Cable_Calibration:
 	filename = path + 'Calibrations/Cables_140520/Channel_1_Coax_2_50mK_KIDs_Run_50a_ScanData_37mK_2014520183338_Fixed20140625.mat'

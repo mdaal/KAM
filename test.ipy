@@ -1,21 +1,21 @@
 if 0:
 	try:
-		del swp
+		del sweep
 	except:
 		pass
 
 	reload(iqsweep_ucb)
 
-	swp =  iqsweep_ucb.IQsweep()
+	sweep =  iqsweep_ucb.IQsweep()
 
 
 
-	#swp.LoadMat(mat,0)
-	swp.LoadSWP('0-1-54.swp',0)
+	#sweep.LoadMat(mat,0)
+	sweep.LoadSWP('0-1-54.sweep',0)
 	print('Data Loaded')
-	swp.FitMagMP()
+	sweep.FitMagMP()
 	print('Mag Fit Done')
-	swp.FitLoopMP()
+	sweep.FitLoopMP()
 	print('Loop Fit Done')
 
 if 0:
@@ -111,17 +111,17 @@ if 0:
 if 0: 
 	import KAM
 	reload(KAM)
-	swp = KAM.sweep()
+	sweep = KAM.sweep()
 	filename = '/Users/miguel_daal/Desktop/Some_Data/Calibrations/Cables_140520/Channel_1_Coax_2_50mK_KIDs_Run_50a_ScanData_37mK_2014520183338_Fixed20140625.mat'
-	swp.load_scandata(filename)
+	sweep.load_scandata(filename)
 	index = 1 
-	swp.pick_loop(index)
-	swp.fit_cable_loss(Verbose = False)
+	sweep.pick_loop(index)
+	sweep.fit_cable_loss(Verbose = False)
 	filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/TP_Sweep/49a_ScanData_45mK_2014420142743.mat'
 	
-	swp._Temperature_Calibration = [(0.7, 0.602), (0.65,0.559), (0.6,0.502), (0.55,0.4456), (0.5,0.375), (0.45,0.3289), (0.4,0.290), (0.35,0.2524), (0.3, 0.2167), (0.25,0.184), (0.225,0.165), (0.2,0.1484), (0.175,0.1324), (0.15,0.1158), (0.1,0.0802), (0.0,0.0372)]
-	swp.load_scandata(filename)
-	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
+	sweep._Temperature_Calibration = [(0.7, 0.602), (0.65,0.559), (0.6,0.502), (0.55,0.4456), (0.5,0.375), (0.45,0.3289), (0.4,0.290), (0.35,0.2524), (0.3, 0.2167), (0.25,0.184), (0.225,0.165), (0.2,0.1484), (0.175,0.1324), (0.15,0.1158), (0.1,0.0802), (0.0,0.0372)]
+	sweep.load_scandata(filename)
+	sweep.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 
 
 if 0:
@@ -137,85 +137,85 @@ if 0:
 if 0:
 	import KAM
 	reload(KAM)
-	swp = KAM.sweep()
+	sweep = KAM.sweep()
 	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run44a/P_Sweep/44a_ScanData_60mK_20131210213718.mat' #p input issue	
 	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run51b/TP_Sweep/51b_ScanData_Merged_42mK_20141128.mat'
 	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/TP_Sweep/49a_ScanData_45mK_2014420142743.mat'
 	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/Survey/49a_ScanData_45mK_2014417175147.mat' #survey
 	filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/P_Sweep/49a_ScanData_45mK_201442443323.mat' #P sweep
-	swp.load_scandata(filename)
+	sweep.load_scandata(filename)
 	index = 0
-	swp.pick_loop(index)
+	sweep.pick_loop(index)
 
 
 if 0:
 	import KAM
 	reload(KAM)
-	swp = KAM.sweep()
+	sweep = KAM.sweep()
 	filename = '/Users/miguel_daal/Desktop/Some_Data/Run49a/TP_Sweep/49a_ScanData_45mK_2014420142743.mat'
 	#filename = 'S5cellsize.s2p'
 	
 
-	#swp.load_touchstone(filename)
-	#swp.load_hf5('40b_Single_Res_TP_Sweep.h5')
-	#swp.load_scandata('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run33b/TP_Sweep/33b_ScanData_52mK_201172315038.mat')
-	#swp.load_scandata('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run44b/Survey/44b_ScanData_40mK_20131218112528.mat')
+	#sweep.load_touchstone(filename)
+	#sweep.load_hf5('40b_Single_Res_TP_Sweep.h5')
+	#sweep.load_scandata('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run33b/TP_Sweep/33b_ScanData_52mK_201172315038.mat')
+	#sweep.load_scandata('http://cosmology.berkeley.edu/~miguel/private/KIPS_Data/Data/Run44b/Survey/44b_ScanData_40mK_20131218112528.mat')
 	filename = '/Users/miguel_daal/Desktop/Some_Data/Calibrations/Cables_140520/Channel_1_Coax_2_50mK_KIDs_Run_50a_ScanData_37mK_2014520183338_Fixed20140625.mat'
 	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run48a/P_Sweep/48a_ScanData_45mK_201433112722.mat'
-	swp.load_scandata(filename)
+	sweep.load_scandata(filename)
 	index = 1 
-	swp.pick_loop(index)
-	swp.fit_cable_loss(Verbose = False)
+	sweep.pick_loop(index)
+	sweep.fit_cable_loss(Verbose = False)
 	filename = '/Users/miguel_daal/Desktop/Some_Data/Run44b/P_Sweep/44b_ScanData_60mK_2013121105756.mat' #S5 p sweep
 	#filename = '/Users/miguel_daal/Desktop/Some_Data/Run48a/TP_Sweep/48a_ScanData_70mK_201433101142.mat'
 	#filename = '/Volumes/STORE N GO/KIPS_Data/Run49a/TP_Sweep/49a_ScanData_45mK_2014420142743.mat'
 	#filename = '/Volumes/STORE N GO/KIPS_Data/Run33b/TP_Sweep/33b_ScanData_52mK_201172315038.mat'
 	
-	swp.load_scandata(filename)
-	swp.metadata.Atten_At_4K = 30
-	swp.metadata.Atten_NA_Output = 20
-	swp.Sweep_Array['Pinput_dB'] = swp.Sweep_Array['Pinput_dB']+20
+	sweep.load_scandata(filename)
+	sweep.metadata.Atten_At_4K = 30
+	sweep.metadata.Atten_NA_Output = 20
+	sweep.Sweep_Array['Pinput_dB'] = sweep.Sweep_Array['Pinput_dB']+20
 	
 	index = 1 
-	swp.pick_loop(index)
+	sweep.pick_loop(index)
 
-	#swp.plot_loop()
-	#swp.trim_loop(N = 5)
-	#swp.plot_loop()
+	#sweep.plot_loop()
+	#sweep.trim_loop(N = 5)
+	#sweep.plot_loop()
 	# Remove Cable Delay
-	#Loop = swp.remove_cable_delay(Loop, Show_Plot = False)
+	#Loop = sweep.remove_cable_delay(Loop, Show_Plot = False)
 
 	# Fit loop to circle
-	#Loop = swp.circle_fit(Loop)
+	#Loop = sweep.circle_fit(Loop)
 
 if 0: 
 	import KAM
 	reload(KAM)
-	swp = KAM.sweep()
-	swp.load_hf5('40b_Single_Res_TP_Sweep.h5')
+	sweep = KAM.sweep()
+	sweep.load_hf5('40b_Single_Res_TP_Sweep.h5')
 	index = 1 
-	swp.pick_loop(index)
+	sweep.pick_loop(index)
 
 	# Remove Gain Compression
-	swp.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False)
+	sweep.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False)
 
 	# Remove Cable Delay
-	swp.remove_cable_delay(Show_Plot = False)	
+	sweep.remove_cable_delay(Show_Plot = False)	
 
 	# Fit loop to circle
-	swp.circle_fit(Show_Plot = True)
+	sweep.circle_fit(Show_Plot = True)
 
 	# Fit resonance parameters
-	swp.phase_fit(Fit_Method = 'Multiple',Verbose = True, Show_Plot = True)
+	sweep.phase_fit(Fit_Method = 'Multiple',Verbose = True, Show_Plot = True)
 
 if 0:
-	#Accessing swp.Sweep_Array
-	 s = swp.Sweep_Array.view(np.recarray)
+	#Accessing sweep.Sweep_Array
+	 s = sweep.Sweep_Array.view(np.recarray)
 	 s.Temperature
 
 
 	 s.dtype.names # see the names of the columns
-	 #swp.Sweep_Array.view(np.float64).reshape(swp.Sweep_Array.shape + (-1,))
+	 #sweep.Sweep_Array.view(np.float64).reshape(sweep.Sweep_Array.shape + (-1,))
 
 
 if 0:
@@ -531,7 +531,7 @@ if 0:
 
 	index = 7
 	#52 sweeps - some very nonlinear
-	swp     = KAM.sweep(); swp.load_hf5('/Run48a/T201403311119', filename = database_location); swp.metadata.width = 8;
+	sweep     = KAM.sweep(); sweep.load_hf5('/Run48a/T201403311119', filename = database_location); sweep.metadata.width = 8;
 	
 	sensor_ids = np.array(['S1','S2','S3','S4','S5','S6','S7','S8','S9','S10','S11','S12','S13','S14','S15','S16'])
 	Z3 = np.array([85.7779239,	67.8250245,	50.1762772,	33.824545,	21.2469277,	12.7273743,	7.18826586,	3.5793348,	78.4335348,	61.6228064,	45.6375047,	31.5852207,	20.407557,	12.372514,	7.10001542,	3.89603542])
@@ -569,7 +569,7 @@ if 0:
 			return wafer_label
 
 		def _extract_sensor_id():
-			sensor = swp.metadata.Sensor
+			sensor = sweep.metadata.Sensor
 			wafer_label  = _extract_wafer_label(sensor)
 
 			split_string  = sensor.replace(wafer_label ,'').split()
@@ -589,8 +589,8 @@ if 0:
 			
 
 		def _extract_width():
-			''' extracts resonator width from swp.metadata.Sensor,'''
-			sensor = swp.metadata.Sensor
+			''' extracts resonator width from sweep.metadata.Sensor,'''
+			sensor = sweep.metadata.Sensor
 			e = sensor.rfind('um')
 			s = e - 1
 			while True:
@@ -604,14 +604,14 @@ if 0:
 
 
 
-		gid = _extract_wafer_label(swp.metadata.Ground_Plane)
+		gid = _extract_wafer_label(sweep.metadata.Ground_Plane)
 		sid = _extract_sensor_id()
-		swp.metadata.Resonator_Width = _extract_width()*1e-6 # in meters
-		swp.metadata.Resonator_Thickness =  200*1e-9 #list if more than one
-		swp.metadata.Resonator_Impedance = Z3_dict[sid]
-		swp.metadata.Resonator_Eeff = Eeff_dict[sid] # Resonator Dielectric Constant
-		swp.metadata.Through_Line_Impedance = Z1_dict[sid]
-		swp.metadata.Ground_Plane_Thickness = gp_thickness_dict[gid]*1e-9
+		sweep.metadata.Resonator_Width = _extract_width()*1e-6 # in meters
+		sweep.metadata.Resonator_Thickness =  200*1e-9 #list if more than one
+		sweep.metadata.Resonator_Impedance = Z3_dict[sid]
+		sweep.metadata.Resonator_Eeff = Eeff_dict[sid] # Resonator Dielectric Constant
+		sweep.metadata.Through_Line_Impedance = Z1_dict[sid]
+		sweep.metadata.Ground_Plane_Thickness = gp_thickness_dict[gid]*1e-9
 
 	_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
 
@@ -623,81 +623,81 @@ if 0:
 	reload(KAM)	
 	
 	
-	# swp.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
-	# swp.remove_cable_delay(Show_Plot = False, Verbose = False) 
-	# swp.circle_fit(Show_Plot = False) 
-	# swp.phase_fit(Fit_Method = 'Multiple',Verbose = True, Show_Plot = True)	
+	# sweep.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
+	# sweep.remove_cable_delay(Show_Plot = False, Verbose = False) 
+	# sweep.circle_fit(Show_Plot = False) 
+	# sweep.phase_fit(Fit_Method = 'Multiple',Verbose = True, Show_Plot = True)	
 	
 	index = 7
-	#swp     = KAM.sweep(); swp.load_hf5('/Run46a/T201402262113', filename = database_location); swp.metadata.width = 256
+	#sweep     = KAM.sweep(); sweep.load_hf5('/Run46a/T201402262113', filename = database_location); sweep.metadata.width = 256
 	
 	#has an outlier curve - very nonlinear resonator
-	swp     = KAM.sweep(); swp.load_hf5('/Run45a/T201402061732', filename = database_location); swp.metadata.width =64; swp.metadata.custom = [True,'', '-']# to high power
+	sweep     = KAM.sweep(); sweep.load_hf5('/Run45a/T201402061732', filename = database_location); sweep.metadata.width =64; sweep.metadata.custom = [True,'', '-']# to high power
 	
 	#this one is blurred by mirophonics
-	#swp     = KAM.sweep(); swp.load_hf5('/Run45b/T201402062055', filename = database_location); swp.metadata.width = 128;
+	#sweep     = KAM.sweep(); sweep.load_hf5('/Run45b/T201402062055', filename = database_location); sweep.metadata.width = 128;
 
 	#this one show very clear loop squashing
-	#swp    = KAM.sweep(); swp.load_hf5('/Run46a/T201402211440', filename = database_location); 
+	#sweep    = KAM.sweep(); sweep.load_hf5('/Run46a/T201402211440', filename = database_location); 
 
 	#52 sweeps - some very nonlinear
-	#swp     = KAM.sweep(); swp.load_hf5('/Run48a/T201403311119', filename = database_location); swp.metadata.width = 8;
+	#sweep     = KAM.sweep(); sweep.load_hf5('/Run48a/T201403311119', filename = database_location); sweep.metadata.width = 8;
 	
 
 	#run 51a survey -- index must be 0!
-	#swp    = KAM.sweep(); swp.load_hf5('/Run51a/T201411161833', filename = database_location); index = 0 
+	#sweep    = KAM.sweep(); sweep.load_hf5('/Run51a/T201411161833', filename = database_location); index = 0 
 
 	#run 52b survey -- index must be 0! (Low freq survey)
-	#swp    = KAM.sweep(); swp.load_hf5('/Run52b/T201503112206', filename = database_location); index = 0 
+	#sweep    = KAM.sweep(); sweep.load_hf5('/Run52b/T201503112206', filename = database_location); index = 0 
 
 	#run 52b survey -- index must be 0! (High freq survey)
-	#swp    = KAM.sweep(); swp.load_hf5('/Run52b/T201502262156', filename = database_location); index = 0
+	#sweep    = KAM.sweep(); sweep.load_hf5('/Run52b/T201502262156', filename = database_location); index = 0
 
 	#false data /RunF1/T201505011200
-	#swp    = KAM.sweep(); swp.load_hf5('/RunF1/T201505011200', filename = database_location);
+	#sweep    = KAM.sweep(); sweep.load_hf5('/RunF1/T201505011200', filename = database_location);
 
-	swp.pick_loop(index)
-	#swp.metadata.Electrical_Delay = None
-	#swp.remove_cable_delay(Show_Plot = False)#center_freq = 700e6)
-	#x = swp.nonlinear_fit()
+	sweep.pick_loop(index)
+	#sweep.metadata.Electrical_Delay = None
+	#sweep.remove_cable_delay(Show_Plot = False)#center_freq = 700e6)
+	#x = sweep.nonlinear_fit()
 
 
 	# index = 143
 	# filename = path + 'Run48b/TP_Sweep/48b_ScanData_45mK_201441101927.mat'	
-	# swp.load_scandata(filename)
-	# swp.metadata.Sensor = 'S5 FHN1 (32um width)'
+	# sweep.load_scandata(filename)
+	# sweep.metadata.Sensor = 'S5 FHN1 (32um width)'
 	# _set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1)
-	# swp.pick_loop(index)
+	# sweep.pick_loop(index)
 
-	# swp.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = True)
-	# swp.remove_cable_delay(Show_Plot = False, Verbose = False)
-	# swp.circle_fit(Show_Plot = False)
-	# swp.phase_fit()
+	# sweep.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = True)
+	# sweep.remove_cable_delay(Show_Plot = False, Verbose = False)
+	# sweep.circle_fit(Show_Plot = False)
+	# sweep.phase_fit()
 if 0:
 	database_location = 'Data/My_Data_Library.h5'
 	%pylab
 	%run -i  Gen_Data.py
-	swp.save_hf5( filename = database_location, overwrite = True)
+	sweep.save_hf5( filename = database_location, overwrite = True)
 	index = 7
 
-	swp.pick_loop(index)
-	#x = swp.nonlinear_fit()
+	sweep.pick_loop(index)
+	#x = sweep.nonlinear_fit()
 if 0:
 	import KAM
 	reload(KAM)
 
 	from scipy.interpolate import interp1d
 
-	swp    = KAM.sweep(); swp.load_hf5('/Run51a/T201411161833', filename = database_location); index = 0
-	swp.pick_loop(index)
-	swp.remove_cable_delay()
-	swp.pick_loop(index)
-	tau = swp.metadata.Electrical_Delay #sec
+	sweep    = KAM.sweep(); sweep.load_hf5('/Run51a/T201411161833', filename = database_location); index = 0
+	sweep.pick_loop(index)
+	sweep.remove_cable_delay()
+	sweep.pick_loop(index)
+	tau = sweep.metadata.Electrical_Delay #sec
 	tau_bandwidth = 1/tau #Hz - Estimate of winding bandwith using tau
 	center_freq = 700e6 #Hz
 
-	S21 = swp.loop.z
-	f = swp.loop.freq
+	S21 = sweep.loop.z
+	f = sweep.loop.freq
 	closest_index_to_center_freq = np.where(np.abs(f-center_freq) == np.abs(f-center_freq).min()) 
 	S21 = S21*np.exp(np.complex(0,-np.angle(S21[closest_index_to_center_freq]))) #rotate circle so that S21[center_freq] is close to positive x axis, and angle(S21[center_freq]) ~ 0
 	
@@ -738,9 +738,9 @@ if 0:
 	database_location = 'Data/My_Data_Library.h5'
 	import KAM
 	reload(KAM)	
-	swp  = KAM.sweep();  
+	sweep  = KAM.sweep();  
 
-	swp.load_hf5('/Run45a/T201402061732', filename = database_location);
+	sweep.load_hf5('/Run45a/T201402061732', filename = database_location);
 
 
 	index = 11
@@ -791,15 +791,15 @@ if 0:
 	Readout_Dict['NA']  = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
 
 
-	swp.metadata.Readout_Dict = Readout_Dict
-	swp.metadata.Digitizer = 'NA'
-	fit(index,swp)
+	sweep.metadata.Readout_Dict = Readout_Dict
+	sweep.metadata.Digitizer = 'NA'
+	fit(index,sweep)
 
 
 	def plot_fit(R = 0,tau = 0):
-		S21 = swp.Sweep_Array[index]['S21']
-		F = swp.Sweep_Array[index]["Frequencies"]
-		s,t,u,g,x = swp.chi_square()
+		S21 = sweep.Sweep_Array[index]['S21']
+		F = sweep.Sweep_Array[index]["Frequencies"]
+		s,t,u,g,x = sweep.chi_square()
 		s21 =  np.vectorize(s)
 		z = s21(F)*np.exp(np.complex(0.,R))* np.exp(np.complex(0,-2*np.pi*tau)*F)
 		fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
@@ -815,15 +815,15 @@ if 0:
 		#x = np.array([ np.complex(-2.95832897e-01,-0.73027548), np.complex(1.00782510e-07,0.) ,np.complex(1.50631220e+05,0.)  ,  np.complex(3.18966486e+05,0.) , np.complex(6.64768336e+08,0. ) , np.complex(1.33061244e-01,0.) ])
 		# num 9 run 45a, chi squared  29195
 		#x = np.array([ np.complex(-2.81846369e-01,-0.78787097),   np.complex(9.47642903e-08,0)  ,np.complex(1.23896077e+05,0)        ,   np.complex(3.68141450e+05,0)        , np.complex(6.64763039e+08,0)        ,  np.complex(-4.68587128e-02,0)        ])
-		s_fit = lambda f: swp.loop.normalization * np.exp(np.complex(0.,angle(x[0]))) * np.exp(np.complex(0,-2*np.pi*x[1])*f) * (1 - (x[2]/x[3])*np.exp(np.complex(0,-x[5])) / np.complex(1, 2*x[2]*(f-x[4])/x[4]))
+		s_fit = lambda f: sweep.loop.normalization * np.exp(np.complex(0.,angle(x[0]))) * np.exp(np.complex(0,-2*np.pi*x[1])*f) * (1 - (x[2]/x[3])*np.exp(np.complex(0,-x[5])) / np.complex(1, 2*x[2]*(f-x[4])/x[4]))
 		S = np.vectorize(s_fit)
 		line = ax.plot(S(F).real,S(F).imag,'go', label = 'Secondary Fit')
 		ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
 		ax.set_xlabel(r'$\Re[S_{21}(f)]$')
 		ax.set_ylabel(r'$\Im[S_{21}(f)]$')
 		ax.yaxis.labelpad = -6
-		fig.savefig('Loop_Run_{0}_Index_{1}'.format(swp.metadata.Run, index), dpi = 300, transparency  = True)
-		#ax.set_title('Run: {0}; Sensor: {1}; Ground: {2}; Record Date: {3}'.format(swp.metadata.Run, swp.metadata.Sensor, swp.metadata.Ground_Plane, swp.metadata.Time_Created),fontsize=10)
+		fig.savefig('Loop_Run_{0}_Index_{1}'.format(sweep.metadata.Run, index), dpi = 300, transparency  = True)
+		#ax.set_title('Run: {0}; Sensor: {1}; Ground: {2}; Record Date: {3}'.format(sweep.metadata.Run, sweep.metadata.Sensor, sweep.metadata.Ground_Plane, sweep.metadata.Time_Created),fontsize=10)
 		return x
 
 if 0:
@@ -831,9 +831,9 @@ if 0:
 	database_location = 'Data/My_Data_Library.h5'
 	import KAM
 	reload(KAM)	
-	swp  = KAM.sweep();  
-	swp.load_hf5('/Run45a/T201402061732', filename = database_location);
-	# SC = swp.metadata.Readout_Dict
+	sweep  = KAM.sweep();  
+	sweep.load_hf5('/Run45a/T201402061732', filename = database_location);
+	# SC = sweep.metadata.Readout_Dict
 
 	# fig = plt.figure( figsize=(5,5))#, dpi=150)
 	# ax = fig.add_subplot(111)
@@ -851,19 +851,19 @@ if 0:
 	# 	ax.plot(x_sam, numpy.polynomial.polynomial.polyval(x_sam,coefs),'-')
 	# plt.show()
 
-	SC = swp.metadata.System_Calibration
+	SC = sweep.metadata.System_Calibration
 	for key in SC.keys():
 		print key, '  ', SC[key].keys()
 
-	swp.fit_system_calibration()
+	sweep.fit_system_calibration()
 
-	SC = swp.metadata.System_Calibration
+	SC = sweep.metadata.System_Calibration
 	for key in SC.keys():
 		print key, '  ', SC[key].keys()
 
-	swp.fit_system_calibration()
+	sweep.fit_system_calibration()
 
-	SC = swp.metadata.System_Calibration
+	SC = sweep.metadata.System_Calibration
 	for key in SC.keys():
 		print key, '  ', SC[key].keys()
 
@@ -887,26 +887,26 @@ if 0:
 	database_location = 'Data/My_Data_Library.h5'
 	import KAM
 	reload(KAM)	
-	swp  = KAM.sweep();  
-	swp.load_hf5('/Run45a/T201402061732', filename = database_location);
+	sweep  = KAM.sweep();  
+	sweep.load_hf5('/Run45a/T201402061732', filename = database_location);
 
-	swp.loop.index = 0
-	F = swp.Sweep_Array[swp.loop.index]['Frequencies']
+	sweep.loop.index = 0
+	F = sweep.Sweep_Array[sweep.loop.index]['Frequencies']
 
 	cable_order = ['4K_to_40mK', '300K_to_4K', 'One_Way_300K'] # first , second, third cable stretches
 
-	CC = swp.metadata.Cable_Calibration
+	CC = sweep.metadata.Cable_Calibration
 	cable_g = []
 	for i in xrange(len(cable_order)):
 		cable_g.append(CC[cable_order[i]][0]*np.sqrt(F)+CC[cable_order[i]][1]*F+CC[cable_order[i]][2])
 
-if 1:
+if 0: #Development of Complete Fit function
 	database_location = 'Data/My_Data_Library.h5'
 	import KAM
 	reload(KAM)	
-	swp  = KAM.sweep();  
+	sweep  = KAM.sweep();  
 
-	swp.load_hf5('/Run45a/T201402061732', filename = database_location);
+	sweep.load_hf5('/Run45a/T201402061732', filename = database_location);
 
 
 	index = 0
@@ -917,23 +917,23 @@ if 1:
 	    sweep.remove_cable_delay(Show_Plot = False, Verbose = False,Force_Recalculate = False) 
 	    sweep.circle_fit(Show_Plot = False) 
 	    sweep.phase_fit(Fit_Method = 'Multiple',Verbose = False, Show_Plot = False)
-	fit(index,swp)
+	fit(index,sweep)
 
 
-	a,b = swp.loop.a,swp.loop.b
-	tau = swp.metadata.Electrical_Delay
-	Q = swp.loop.Q 
-	Qc = swp.loop.Qc 
-	fr = swp.loop.fr 
-	phi = (swp.loop.phi * np.pi/180) + 0*np.pi
-	s21_  = lambda f: swp.loop.normalization * np.exp(np.complex(0.,angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*f*tau)) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / np.complex(1, 2*Q*(f-fr)/fr))
+	a,b = sweep.loop.a,sweep.loop.b
+	tau = sweep.metadata.Electrical_Delay
+	Q = sweep.loop.Q 
+	Qc = sweep.loop.Qc 
+	fr = sweep.loop.fr 
+	phi = (sweep.loop.phi * np.pi/180) + 0*np.pi
+	s21_  = lambda f: sweep.loop.normalization * np.exp(np.complex(0.,angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*f*tau)) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / np.complex(1, 2*Q*(f-fr)/fr))
 	s21 =  np.vectorize(s21_)
 
 
 	def plot_fit(R = 0,tau = 0):
-		S21 = swp.Sweep_Array[index]['S21']
-		F = swp.Sweep_Array[index]["Frequencies"]
-		x = swp.complete_fit()
+		S21 = sweep.Sweep_Array[index]['S21']
+		F = sweep.Sweep_Array[index]["Frequencies"]
+		x = sweep.complete_fit()                       # <<<<<-------------
 		
 		z = s21(F)*np.exp(np.complex(0.,R))* np.exp(np.complex(0,-2*np.pi*tau)*F)
 		fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
@@ -950,40 +950,122 @@ if 1:
 		# num 9 run 45a, chi squared  29195
 		#x = np.array([ np.complex(-2.81846369e-01,-0.78787097),   np.complex(9.47642903e-08,0)  ,np.complex(1.23896077e+05,0)        ,   np.complex(3.68141450e+05,0)        , np.complex(6.64763039e+08,0)        ,  np.complex(-4.68587128e-02,0)        ])
 		
-		s_fit = lambda f: swp.loop.normalization * np.exp(np.complex(0.,angle(np.complex(x[0],x[1])))) * np.exp(np.complex(0,-2*np.pi*x[2])*f) * (1 - (x[3]/x[4])*np.exp(np.complex(0,-x[6])) / np.complex(1, 2*x[3]*(f-x[5])/x[5]))
+		s_fit = lambda f: sweep.loop.normalization * np.exp(np.complex(0.,angle(np.complex(x[0],x[1])))) * np.exp(np.complex(0,-2*np.pi*x[2])*f) * (1 - (x[3]/x[4])*np.exp(np.complex(0,-x[6])) / np.complex(1, 2*x[3]*(f-x[5])/x[5]))
 		S = np.vectorize(s_fit)
 		line = ax.plot(S(F).real,S(F).imag,'go', label = 'Secondary Fit')
 		ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
 		ax.set_xlabel(r'$\Re[S_{21}(f)]$')
 		ax.set_ylabel(r'$\Im[S_{21}(f)]$')
 		ax.yaxis.labelpad = -6
-		fig.savefig('Loop_Run_{0}_Index_{1}'.format(swp.metadata.Run, index), dpi = 300, transparency  = True)
-		#ax.set_title('Run: {0}; Sensor: {1}; Ground: {2}; Record Date: {3}'.format(swp.metadata.Run, swp.metadata.Sensor, swp.metadata.Ground_Plane, swp.metadata.Time_Created),fontsize=10)
+		fig.savefig('Loop_Run_{0}_Index_{1}'.format(sweep.metadata.Run, index), dpi = 300, transparency  = True)
+		#ax.set_title('Run: {0}; Sensor: {1}; Ground: {2}; Record Date: {3}'.format(sweep.metadata.Run, sweep.metadata.Sensor, sweep.metadata.Ground_Plane, sweep.metadata.Time_Created),fontsize=10)
 
 
 		return x
 	plot_fit()
 
 
+if 1:
+	Ver = 2
+	%run -i Load_Datasets.py
+
+
+	##Run45aP #64um
+	##Run45bP #128um
+	##Run48aP #8um
+	##Run49aP #4um
+
+
+	# Perform Nonlinear Fits and Save figures
+	# index = 0 
+	# Run45aP.pick_loop(index)
+	# fit, fig, ax = Run45aP.nonlinear_fit(Save_Fig = True)
+
+
+	# Run45bP.pick_loop(index) #invalid values in sqrt
+	# Run45bP.nonlinear_fit(Save_Fig = True)
+
+	# Run48aP.pick_loop(index)
+	# Run48aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-9,3))
+
+	# Run49aP.pick_loop(index)
+	# Run49aP.nonlinear_fit(Save_Fig = True, Indexing = (None,None,8))
+
+	# Run44aP.pick_loop(index)
+	# Run44aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-5,None))
+
+
+	# Run46aPl.pick_loop(index)
+	# Run46aPl.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))
+
+
+
+
+	##Construct Simulated data for run  Run45aP, then non-linear fit it, then construct sweep array including Concurrent and Stepwise fits and save
+	# bestfit = 'Powell'
+	# Zfl = Run45aP.metadata.Feedline_Impedance
+	# Zres = Run45aP.metadata.Resonator_Impedance
+	# V30V30 = fit['V30V30']
+	# eta = fit[bestfit].x[4]
+	# delta =  fit[bestfit].x[5]
+	# f0 = fit[bestfit].x[0]
+	# Qi = fit[bestfit].x[1]
+	# Qc = fit[bestfit].x[2]
+	# phi31 = fit[bestfit].x[3]
+
+	# import KAM
+	# reload(KAM)	
+	# sweep  = KAM.sweep();
+
+	# sweep.generate_nonlinear_data(Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None,
+	# 	curve_parameter_dict = {'f_0':f0, 'Qtl':Qi, 'Qc':Qc, 'eta':eta, 'delta':delta, 'Zfl':Zfl, 'Zres':Zres, 'phi31': phi31, 'phiV1':0, 'V30V30':V30V30 },
+	# 	sweep_parameter_dict = {'Run': 'Mock_45a', 'Pprobe_dBm_Start' :-100.0,'Pprobe_dBm_Stop': -54.0, 'Pprobe_Num_Points':17, 'numBW':24,'num': 1000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'})
+
+	# sweep.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))
+
+	# sweep.metadata.Resonator_Width = Run45aP.metadata.Resonator_Width 
+	# sweep.metadata.Resonator_Thickness =  Run45aP.metadata.Resonator_Thickness
+	# sweep.metadata.Resonator_Impedance = Run45aP.metadata.Resonator_Impedance
+	# sweep.metadata.Resonator_Eeff = Run45aP.metadata.Resonator_Eeff
+	# sweep.metadata.Feedline_Impedance = Run45aP.metadata.Feedline_Impedance
+	# sweep.metadata.Ground_Plane_Thickness = Run45aP.metadata.Ground_Plane_Thickness
+	# sweep.metadata.System_Calibration = Run45aP.metadata.System_Calibration
+	# sweep.metadata.Digitizer = Run45aP.metadata.Digitizer
+	# sweep.metadata.RTAmp = Run45aP.metadata.RTAmp
+	# sweep.metadata.Electrical_Delay = 0
+	# sweep.metadata.Cable_Calibration = Run45aP.metadata.Cable_Calibration
+	# sweep.metadata.LNA = Run45aP.metadata.LNA
+	# sweep.metadata.RTAmp_In_Use  = Run45aP.metadata.RTAmp_In_Use
+	# sweep.metadata.IFBW =  Run45aP.metadata.IFBW
+
+	# sweep.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False,Complete_Fit = True )
+
+
+	# sweep.save_hf5(overwrite = True)	
 
 
 
 
 
+	
+ 	def fit(sweep):
+		sweep.decompress_gain(Show_Plot = False, Verbose = False)
+		sweep.normalize_loop()
+		sweep.remove_cable_delay(Show_Plot = False, Verbose = False) 
+		sweep.circle_fit(Show_Plot = False) 
+		sweep.phase_fit(Show_Plot = False, Verbose = False)
+
+	### Draw loops for Run45aP Data
+	# for index in [0,8,9,11]:
+	# 	Run45aP.pick_loop(index)
+	# 	fit(Run45aP)
+	# 	Run45aP.complete_fit( Use_Mask = True, Verbose = False , Show_Plot = True, Save_Fig = True)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+	### Draw loops for Simulated Run45aP Data
+	for index in [0,8,9,11]:
+		Run45aP_Mock.pick_loop(index)
+		fit(Run45aP_Mock)
+		Run45aP_Mock.complete_fit( Use_Mask = True, Verbose = False , Show_Plot = True, Save_Fig = True)
 
 
