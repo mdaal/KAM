@@ -976,8 +976,8 @@ if 1:
 	##Run49aP #4um
 
 
-	# Perform Nonlinear Fits and Save figures
-	# index = 0 
+	# # Perform Nonlinear Fits and Save figures
+	index = 0 
 	# Run45aP.pick_loop(index)
 	# fit, fig, ax = Run45aP.nonlinear_fit(Save_Fig = True)
 
@@ -1017,26 +1017,13 @@ if 1:
 	# reload(KAM)	
 	# sweep  = KAM.sweep();
 
-	# sweep.generate_nonlinear_data(Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None,
+	# sweep.generate_nonlinear_data(Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None, Like = Run45aP,
 	# 	curve_parameter_dict = {'f_0':f0, 'Qtl':Qi, 'Qc':Qc, 'eta':eta, 'delta':delta, 'Zfl':Zfl, 'Zres':Zres, 'phi31': phi31, 'phiV1':0, 'V30V30':V30V30 },
 	# 	sweep_parameter_dict = {'Run': 'Mock_45a', 'Pprobe_dBm_Start' :-100.0,'Pprobe_dBm_Stop': -54.0, 'Pprobe_Num_Points':17, 'numBW':24,'num': 1000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'})
 
 	# sweep.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))
 
-	# sweep.metadata.Resonator_Width = Run45aP.metadata.Resonator_Width 
-	# sweep.metadata.Resonator_Thickness =  Run45aP.metadata.Resonator_Thickness
-	# sweep.metadata.Resonator_Impedance = Run45aP.metadata.Resonator_Impedance
-	# sweep.metadata.Resonator_Eeff = Run45aP.metadata.Resonator_Eeff
-	# sweep.metadata.Feedline_Impedance = Run45aP.metadata.Feedline_Impedance
-	# sweep.metadata.Ground_Plane_Thickness = Run45aP.metadata.Ground_Plane_Thickness
-	# sweep.metadata.System_Calibration = Run45aP.metadata.System_Calibration
-	# sweep.metadata.Digitizer = Run45aP.metadata.Digitizer
-	# sweep.metadata.RTAmp = Run45aP.metadata.RTAmp
-	# sweep.metadata.Electrical_Delay = 0
-	# sweep.metadata.Cable_Calibration = Run45aP.metadata.Cable_Calibration
-	# sweep.metadata.LNA = Run45aP.metadata.LNA
-	# sweep.metadata.RTAmp_In_Use  = Run45aP.metadata.RTAmp_In_Use
-	# sweep.metadata.IFBW =  Run45aP.metadata.IFBW
+
 
 	# sweep.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False,Complete_Fit = True )
 
@@ -1048,24 +1035,68 @@ if 1:
 
 
 	
- 	def fit(sweep):
-		sweep.decompress_gain(Show_Plot = False, Verbose = False)
-		sweep.normalize_loop()
-		sweep.remove_cable_delay(Show_Plot = False, Verbose = False) 
-		sweep.circle_fit(Show_Plot = False) 
-		sweep.phase_fit(Show_Plot = False, Verbose = False)
+ # 	def fit(sweep):
+	# 	sweep.decompress_gain(Show_Plot = False, Verbose = False)
+	# 	sweep.normalize_loop()
+	# 	sweep.remove_cable_delay(Show_Plot = False, Verbose = False) 
+	# 	sweep.circle_fit(Show_Plot = False) 
+	# 	sweep.phase_fit(Show_Plot = False, Verbose = False)
 
-	### Draw loops for Run45aP Data
-	# for index in [0,8,9,11]:
-	# 	Run45aP.pick_loop(index)
-	# 	fit(Run45aP)
-	# 	Run45aP.complete_fit( Use_Mask = True, Verbose = False , Show_Plot = True, Save_Fig = True)
-
-
-	### Draw loops for Simulated Run45aP Data
+	# ## Draw loops for Run45aP Data
 	for index in [0,8,9,11]:
-		Run45aP_Mock.pick_loop(index)
-		fit(Run45aP_Mock)
-		Run45aP_Mock.complete_fit( Use_Mask = True, Verbose = False , Show_Plot = True, Save_Fig = True)
+		m = 200
+		print "plotting index {}".format(index)
+		Run45aP.pick_loop(index)
+		#fit(Run45aP)
+		fit = Run45aP.complete_fit( Use_Mask = True, Verbose = False, Show_Plot = True, Save_Fig = True,Sample_Size = m)
+		print 'chi^2: MP - {0}, G - {1} with m = {2}'.format(fit['cPowell'].fun, fit['sPowell'].fun,m)
 
+
+	# ### Draw loops for Simulated Run45aP Data
+	# for index in [0,8,9,11]:
+	# 	Run45aP_Mock.pick_loop(index)
+	# 	#fit(Run45aP_Mock)
+	# 	Run45aP_Mock.complete_fit( Use_Mask = True, Verbose = False , Show_Plot = True, Save_Fig = True)
+
+
+
+# In [1069]: run -i test.ipy
+# plotting index 0
+# chi^2: MP - 25.3154991731, G - 27.1373756113 with m = 50, 24.8873859775 with m = 100, 24.1438552501 with m = 150, 25.8816312351 with m = 200
+# plotting index 8
+# chi^2: MP - 188107.228488, G - 307921.402282 with m = 50, 334217.357809 with m = 100, 300443.516729 with m = 150, 291399.498326 with m = 200
+# plotting index 9
+# chi^2: MP - 389301.12478, G - 612868.411592 with m = 50, 502069.960955 with m = 100, 379468.407899 with m = 150, 478445.677522 with m = 200
+# plotting index 11
+# chi^2: MP - 809469.713953, G - 838031.703346 with m = 50, 738493.433572 with m = 100, 828972.132748 with m = 150, 798143.630758 with m = 200
+
+# In [1070]: run -i test.ipy
+# plotting index 0
+# chi^2: MP - 25.3154991731, G - 24.8873859775 with m = 100
+# plotting index 8
+# chi^2: MP - 188107.228488, G - 334217.357809 with m = 100
+# plotting index 9
+# chi^2: MP - 389301.12478, G - 502069.960955 with m = 100
+# plotting index 11
+# chi^2: MP - 809469.713953, G - 738493.433572 with m = 100
+
+# In [1071]: run -i test.ipy
+# plotting index 0
+# chi^2: MP - 25.3154991731, G - 24.1438552501 with m = 150
+# plotting index 8
+# chi^2: MP - 188107.228488, G - 300443.516729 with m = 150
+# plotting index 9
+# chi^2: MP - 389301.12478, G - 379468.407899 with m = 150
+# plotting index 11
+# chi^2: MP - 809469.713953, G - 828972.132748 with m = 150
+
+# In [1072]: run -i test.ipy
+# plotting index 0
+# chi^2: MP - 25.3154991731, G - 25.8816312351 with m = 200
+# plotting index 8
+# chi^2: MP - 188107.228488, G - 291399.498326 with m = 200
+# plotting index 9
+# chi^2: MP - 389301.12478, G - 478445.677522 with m = 200
+# plotting index 11
+# chi^2: MP - 809469.713953, G - 798143.630758 with m = 200
 

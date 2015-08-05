@@ -81,18 +81,24 @@ class loop:
 		self.phase_fit_mask = None
 
 		# complete fit quantities
+		# self.c___ is the phase/magnitude fit
 		self.cQ = None 
 		self.cQc = None
 		self.cQi = None
 		self.cfr = None 
-		#self.FWHM = None
 		self.cphi = None
 		self.cchisquare = None
-		#self.pvalue = None
-		#self.phase_fit_method = None
 		self.cphase_fit_success = None
-		#self.phase_fit_z = None
-		#self.phase_fit_mask = None
+
+		# self.s___ is the self fit result where sigma^2 is determined from data
+		self.sQ = None 
+		self.sQc = None
+		self.sQi = None
+		self.sfr = None 
+		self.sphi = None
+		self.schisquare = None
+		self.sphase_fit_success = None
+
 
 	def __del__(self):
 		pass
@@ -472,12 +478,23 @@ class sweep:
 			("Is_Valid"					, np.bool),
 			("Chi_Squared"              , np.float64),
 			("Mask"						, np.bool,(fsteps,)), # array mask selecting data used in phase fit
+			("R"						, np.float64),
+			("A"						, np.float64),
+			("B"						, np.float64),
+			("Normalization"			, np.float64),
+			("Phi"						, np.float64),
 			("cQ"						, np.float64),
 			("cQc"						, np.float64),
 			("cFr"						, np.float64), # in Hz
 			("cIs_Valid"				, np.bool),
 			("cChi_Squared"             , np.float64),
 			("cPhi"						, np.float64),
+			("sQ"						, np.float64),
+			("sQc"						, np.float64),
+			("sFr"						, np.float64), # in Hz
+			("sIs_Valid"				, np.bool),
+			("sChi_Squared"             , np.float64),
+			("sPhi"						, np.float64),
 
 			#("S21_Processed"            , np.complex128, (fsteps,)), # Processed S21 used in phase fit 
 			])
@@ -2046,7 +2063,12 @@ class sweep:
 												Qc = self.loop.Qc,
 												Fr = self.loop.fr,
 												Mask = self.loop.phase_fit_mask,
-												Chi_Squared = self.loop.chisquare)
+												Chi_Squared = self.loop.chisquare,
+												R = self.loop.r,
+												A = self.loop.a,
+												B = self.loop.b,
+												Normalization  = self.loop.normalization,
+												Phi = self.loop.phi)
 
 				if Complete_Fit:
 					self.complete_fit()
@@ -2055,7 +2077,16 @@ class sweep:
 													cFr = self.loop.cfr,
 													cPhi = self.loop.cphi,
 													cChi_Squared = self.loop.cchisquare,
-													cIs_Valid = self.loop.cphase_fit_success if self.Sweep_Array['Is_Valid'][index] else self.Sweep_Array['Is_Valid'][index])
+													cIs_Valid = self.loop.cphase_fit_success if self.Sweep_Array['Is_Valid'][index] else self.Sweep_Array['Is_Valid'][index],
+
+													sQ = self.loop.sQ,
+													sQc = self.loop.sQc,
+													sFr = self.loop.sfr,
+													sPhi = self.loop.sphi,
+													sChi_Squared = self.loop.schisquare,
+													sIs_Valid = self.loop.sphase_fit_success if self.Sweep_Array['Is_Valid'][index] else self.Sweep_Array['Is_Valid'][index]
+													)
+
 												
 
 
@@ -2090,7 +2121,10 @@ class sweep:
 		print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
 	
 	
-	def complete_fit(self, Use_Mask = True, Verbose = False , Show_Plot = False, Save_Fig = True):
+	def complete_fit(self, Use_Mask = True, Verbose = False , Show_Plot = False, Save_Fig = True, Sample_Size = 100):
+		'''
+		Sample_Size is the number of points used to extablish \sigma^2 for the gaussian noise model
+		'''
 		k = constants.value('Boltzmann constant') #unit is [J/k]
 		BW = self.metadata.IFBW #unit is [Hz]	 
 		SC = self.metadata.System_Calibration # contains Noise powers, gains and P1dB of readout devices
@@ -2109,13 +2143,16 @@ class sweep:
 			F = self.Sweep_Array[self.loop.index]['Frequencies']
 			S21 = self.Sweep_Array[self.loop.index]['S21']
 
+		P_NA_out_dB = self.Sweep_Array[self.loop.index]['Pinput_dB'] #'out' as in our of NA, change of reference point
+		P_NA_out_V2 = .001 * np.power(10,P_NA_out_dB/10) *2 *R 
+		P_NA_in_V2 = np.square(np.abs(S21)) * P_NA_out_V2
 
 		Fit_Method = 'Multiple'
 		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
 		   Fit_Method={Fit_Method}
 
 
-	
+
 		# Chain is the string of readout cables and amplifiers/devices
 		chain  = []
 		if self.metadata.LNA['LNA'] is not None:
@@ -2127,9 +2164,14 @@ class sweep:
 			chain.append(self.metadata.RTAmp) 
 
 		chain.append('One_Way_300K')
+
+		if (self.metadata.Atten_NA_Input is not None) and (self.metadata.Atten_NA_Input>0):
+			chain.append('Atten_NA_Input')
+
+
 		#chain.append('NA')
 
-		cable_temp = {'300K_to_4K' : (290.+4.)/2, 'One_Way_300K': 290}
+		passive_device_temp = {'300K_to_4K' : (290.+4.)/2, 'One_Way_300K': 290., 'Atten_NA_Input':290.}
 		Tn_p_s = []
 		Tn_m_s = []
 		g_s = []
@@ -2139,7 +2181,7 @@ class sweep:
 				g = CC[device][0]*np.sqrt(F)+CC[device][1]*F+CC[device][2]
 				g = np.power(10.0,g/10.0)
 				g_s.append(g)
-				Tn = ((1.0/g)-1)*cable_temp[device]
+				Tn = ((1.0/g)-1)*passive_device_temp[device]
 				Tn_p_s.append(Tn)
 				Tn_m_s.append(Tn)
 				continue
@@ -2152,46 +2194,100 @@ class sweep:
 				Tn_m_s.append(np.polynomial.chebyshev.chebval(F,SC[device]['Tn_m_fit']))
 				continue
 
+			if device is 'Atten_NA_Input':
+				g =  -np.abs(self.metadata.Atten_NA_Input)
+				g = np.power(10.0,g/10.0)
+				g_s.append(g)
+				Tn = ((1.0/g)-1)*passive_device_temp[device]
+				Tn_p_s.append(Tn)
+				Tn_m_s.append(Tn)
+				continue
+
 			# warn me if the component is missing from calibration data
 			print('Component not found in calibration data!!')
 			1/0
 
-		Tn_p_tot = np.zeros_like(F)
-		Tn_m_tot = np.zeros_like(F)
-		g_tot  = np.prod(g_s, axis = 0)
-		for i in xrange(len(chain)):
-			Tn_p_tot = Tn_p_tot +  Tn_p_s[i]/np.prod(g_s[:i], axis = 0)
-			Tn_m_tot = Tn_m_tot +  Tn_m_s[i]/np.prod(g_s[:i], axis = 0)
 
-		sigma_squared_m = 4.0*k*R*g_tot*self.metadata.IFBW* Tn_m_tot
-		sigma_squared_p = 4.0*k*R*g_tot*self.metadata.IFBW* Tn_p_tot
+		######
+		# Tn_p_tot = np.zeros_like(F)
+		# Tn_m_tot = np.zeros_like(F)
+		# g_tot  = np.prod(g_s, axis = 0)
+		# for i in xrange(len(chain)):
+		# 	Tn_p_tot = Tn_p_tot +  Tn_p_s[i]/np.prod(g_s[:i], axis = 0)
+		# 	Tn_m_tot = Tn_m_tot +  Tn_m_s[i]/np.prod(g_s[:i], axis = 0)
+
+		# sigma_squared_m = 4.0*k*R*g_tot*self.metadata.IFBW* Tn_m_tot
+		# sigma_squared_p = 4.0*k*R*g_tot*self.metadata.IFBW* Tn_p_tot
+		#####
+
+		BW = self.metadata.IFBW
+		sigma_squared_m = np.zeros_like(F)
+		sigma_squared_p = np.zeros_like(F)
+		n = len(chain)
+		for i in xrange(n):
+			s2_m = 4*k*Tn_m_s[i]*R*BW
+			s2_p = 4*k*Tn_p_s[i]*R*BW
+			#we assume s2_p * 4 * P_NA_in_V2 = s2_m ,  s2_p measured in radian^2
+			sigma_squared_m = sigma_squared_m + s2_m*np.prod(g_s[i:], axis = 0) #rememebr g is a list of np vectors
+			sigma_squared_p = sigma_squared_p + s2_p*np.square(np.prod(g_s[i:], axis = 0))/(4*P_NA_in_V2) #rememeber P_NA_in_V2 is a function of S21, see above definition
 
 
-		a_0,b_0  = self.loop.a, self.loop.b
+
+		# a_0,b_0  = self.loop.a, self.loop.b
+		# tau_0    = self.metadata.Electrical_Delay
+		# Q_0      = self.loop.Q 
+		# Qc_0     = self.loop.Qc 
+		# fr_0     = self.loop.fr 
+		# phi_0    = (self.loop.phi * np.pi/180) + 0*np.pi
+
+		a_0,b_0  = self.Sweep_Array[self.loop.index]['A'], self.Sweep_Array[self.loop.index]['B']
 		tau_0    = self.metadata.Electrical_Delay
-		Q_0      = self.loop.Q 
-		Qc_0     = self.loop.Qc 
-		fr_0     = self.loop.fr 
-		phi_0    = (self.loop.phi * np.pi/180) + 0*np.pi
+		Q_0      = self.Sweep_Array[self.loop.index]['Q']
+		Qc_0     = self.Sweep_Array[self.loop.index]['Qc']
+		fr_0     = self.Sweep_Array[self.loop.index]['Fr'] 
+		phi_0    = (self.Sweep_Array[self.loop.index]['Phi'] * np.pi/180) + 0*np.pi
+		norm     = self.Sweep_Array[self.loop.index]['Normalization'] 
 
 		#p0 is the initial guess
 		p0 = np.array([a_0,b_0,tau_0,Q_0, Qc_0, fr_0, phi_0])
 
 		def obj(x,s21, sigma_squared_m,sigma_squared_p ,freq):
 			a,b,tau,Q, Qc, fr, phi= x
-			s21_fit  = self.loop.normalization * np.exp(np.complex(0.,np.angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
-			diff = s21 - s21_fit
-			frac = (diff*diff.conj()).real/sigma_squared_m
-			#frac = (np.square(diff.real)/sigma_squared_m) + (np.square(diff.imag)/sigma_squared_m) 
+			s21_fit  = norm * np.exp(np.complex(0.,np.angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+			# diff = s21 - s21_fit
+			# frac = (diff*diff.conj()).real/sigma_squared_m
+			# #frac = (np.square(diff.real)/sigma_squared_m) + (np.square(diff.imag)/sigma_squared_m)
+			frac = np.square(np.abs(s21) -  np.abs(s21_fit))*P_NA_out_V2/sigma_squared_m  + np.square(np.angle(s21/s21_fit))/sigma_squared_p  #(e^ia)/(e^ib) = e^i(a-b)
 			N = freq.shape[0]*1.0 - x.shape[0]
 			return  frac.sum()/N
 
+		# Dont use masked data to sample points for Gaussian variance determination.
+		if Use_Mask:
+			S21_Sample = self.Sweep_Array[self.loop.index]['S21']
+		else:
+			S21_Sample = S21
+
+		sigma_squared = 0 
+		for i in xrange(Sample_Size):
+			sigma_squared = sigma_squared + np.square(np.abs(S21_Sample[i] - S21_Sample[i+1]))
+		sigma_squared = sigma_squared/(2.0*Sample_Size)
 		
+		def obj_s(x,s21, sigma_squared ,freq):
+			a,b,tau,Q, Qc, fr, phi= x
+			s21_fit  = norm * np.exp(np.complex(0.,np.angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+			# diff = s21 - s21_fit
+			# frac = (diff*diff.conj()).real/sigma_squared_m
+			# #frac = (np.square(diff.real)/sigma_squared_m) + (np.square(diff.imag)/sigma_squared_m)
+			frac = np.square(np.abs(s21_fit-s21))/sigma_squared
+			N = freq.shape[0]*1.0 - x.shape[0]
+			return  frac.sum()/N
 		
 		
 		#Each fit method is saved as a lambda function in a dictionary called fit_func
 		fit_func = {}
-		fit_func['Powell'] = lambda : minimize(obj, p0, args=(S21,sigma_squared_m,sigma_squared_p ,F), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
+		fit_func['cPowell'] = lambda : minimize(obj, p0, args=(S21,sigma_squared_m,sigma_squared_p ,F), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
+		fit_func['sPowell'] = lambda : minimize(obj_s, p0, args=(S21,sigma_squared ,F), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
+
 		#fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(S21,sigma_squared ,F), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
 		#fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
 
@@ -2216,23 +2312,33 @@ class sweep:
 				print('\n{0} Minimzation Result:\n{1}\n'.format(method,fit[method]))
 
 		
-		#x = res.x 
-		bestfit = list(fit)[0]
-		lowest = fit[bestfit].fun
-		for key in fit.keys(): 
-			if fit[key].fun < lowest:
-				lowest = fit[key].fun
-				bestfit = key
+		
+		# bestfit = list(fit)[0]
+		# lowest = fit[bestfit].fun
+		# for key in fit.keys(): 
+		# 	if fit[key].fun < lowest:
+		# 		lowest = fit[key].fun
+		# 		bestfit = key
 
-		ca, cb, ctau = fit[bestfit].x[0], fit[bestfit].x[1], fit[bestfit].x[2]
-		self.loop.cQ = cQ = fit[bestfit].x[3]	
-		self.loop.cQc = cQc = fit[bestfit].x[4]	
-		self.loop.cQi = cQi = 1.0/ ((1./self.loop.cQ ) - (1./self.loop.cQc ))
-		self.loop.cfr = cfr = fit[bestfit].x[5]	
-		self.loop.cphi = cphi =  fit[bestfit].x[6]	
-		self.loop.cchisquare = fit[bestfit].fun
-		self.loop.cphase_fit_success = fit[bestfit].success
+		cfit = 'cPowell'
+		ca, cb, ctau = fit[cfit].x[0], fit[cfit].x[1], fit[cfit].x[2]
+		self.loop.cQ = cQ = fit[cfit].x[3]	
+		self.loop.cQc = cQc = fit[cfit].x[4]	
+		self.loop.cQi = cQi = 1.0/ ((1./self.loop.cQ ) - (1./self.loop.cQc )) 
+		self.loop.cfr = cfr = fit[cfit].x[5]	
+		self.loop.cphi = cphi =  fit[cfit].x[6]	
+		self.loop.cchisquare = fit[cfit].fun
+		self.loop.cphase_fit_success = fit[cfit].success
 
+		sfit = 'sPowell'
+		sa, sb, stau = fit[sfit].x[0], fit[sfit].x[1], fit[sfit].x[2]
+		self.loop.sQ = sQ = fit[sfit].x[3]	
+		self.loop.sQc = sQc = fit[sfit].x[4]	
+		self.loop.sQi = sQi = 1.0/ ((1./self.loop.sQ ) - (1./self.loop.sQc )) 
+		self.loop.sfr = sfr = fit[sfit].x[5]	
+		self.loop.sphi = sphi =  fit[sfit].x[6]	
+		self.loop.schisquare = fit[sfit].fun
+		self.loop.sphase_fit_success = fit[sfit].success
 
 	
 
@@ -2241,15 +2347,22 @@ class sweep:
 
 			fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
 			ax = fig.add_subplot(111,aspect='equal')
-			line = ax.plot(S21.real,S21.imag,'bo', label = 'Raw Data')
 
 
-			n = self.loop.normalization
-			s21_stepwise  = n * np.exp(np.complex(0.,np.angle(np.complex(a_0,b_0)))) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,-phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
-			line = ax.plot(s21_stepwise.real,s21_stepwise.imag,'ro', label = 'Stepwise Fit')
+			s21_concurrent_c = norm * np.exp(np.complex(0.,np.angle(np.complex(ca,cb)))) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,-cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
+			line = ax.plot(s21_concurrent_c.real,s21_concurrent_c.imag,'go', label = r'Concurrent Fit -  $\sigma_{V\theta}$')
 
-			s21_concurrent = n * np.exp(np.complex(0.,np.angle(np.complex(ca,cb)))) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,-cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
-			line = ax.plot(s21_concurrent.real,s21_concurrent.imag,'go', label = 'Concurrent Fit')
+			s21_concurrent_s = norm * np.exp(np.complex(0.,np.angle(np.complex(sa,sb)))) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,-sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
+			line = ax.plot(s21_concurrent_s.real,s21_concurrent_s.imag,'mo', label = r'Concurrent Fit -  $\sigma_{G}$')
+
+
+			line = ax.plot(S21.real,S21.imag,'bo', label = r'Raw Data - $S_{21}$')
+
+
+			
+			s21_stepwise  = norm * np.exp(np.complex(0.,np.angle(np.complex(a_0,b_0)))) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,-phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
+			line = ax.plot(s21_stepwise.real,s21_stepwise.imag,'ro', label = r'Stepwise Fit - $\hat{S}_{21}$')
+
 
 
 			ax.set_xlabel(r'$\Re[S_{21}(f)]$')
@@ -2262,7 +2375,7 @@ class sweep:
 
 			plt.show()
 
-		return fit[bestfit].x
+		return fit
 
 
 	def _angle(self, z, deg = 0):
@@ -2836,12 +2949,15 @@ class sweep:
 
 		return k
 
-	def generate_nonlinear_data(self,  Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None,
+	def generate_nonlinear_data(self,  Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None, Like = None,
 		curve_parameter_dict = {'f_0':700e6, 'Qtl':300e3, 'Qc':80e3, 'eta':1e-1, 'delta':1e-6, 'Zfl':30, 'Zres':50, 'phi31': np.pi/2.03, 'phiV1':np.pi/10, 'V30V30':0.01},
 		sweep_parameter_dict = {'Run': 'F1', 'Pprobe_dBm_Start' :-65.0,'Pprobe_dBm_Stop': -25.0, 'Pprobe_Num_Points':10, 'numBW':24,'num': 1000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'}):
-		'''Creates and Loads  Data
-		eta Q nonlinearity
-		delta freq nonlinearity		
+		'''Creates and Loads Nonlinear Data
+		eta -- Q nonlinearity
+		delta --  freq nonlinearity	
+		V30V30 -- V^2 normalization for nonlinearity
+
+		If another KAM.sweep object is supplied in "Like" keyword, then its metadata will copied
 		'''
 		cd = curve_parameter_dict
 		sd = sweep_parameter_dict
@@ -2853,11 +2969,26 @@ class sweep:
 		del(self.loop)
 		self.loop = loop()
 
-		
+		# system_attenuation_before_device = -50 # dB,  Difference between Preadout and Pinput
 		self.metadata.Electrical_Delay = 0.0
 		self.metadata.Feedline_Impedance = cd['Zfl']
 		self.metadata.Resonator_Impedance = cd['Zres']
-		self.metadata.Time_Created =     '05/01/2015 12:00:00' # or the current datetime datetime.datetime.now().strftime('%m/%d/%Y %H:%M:%S')
+		self.metadata.LNA = {}
+		self.metadata.LNA['LNA'] =  'SiGe #1'
+		self.metadata.RTAmp_In_Use = True
+		self.metadata.Atten_At_4K = 40
+		self.metadata.Atten_NA_Output = 0 
+		self.metadata.Atten_NA_Input = 0
+		Cable_Calibration_Key = 'One_Way_40mK'
+		self.metadata.Cable_Calibration = {}
+		self.metadata.Cable_Calibration[Cable_Calibration_Key] = (0,0,0, 'False Cable', 0, 100e9)
+		
+		if Like is not None: #would be better to confrim that Like is an instance of KAM.sweep
+				self.metadata.__dict__.update(Like.metadata.__dict__)
+			
+		
+		self.metadata.Electrical_Delay = 0
+		self.metadata.Time_Created =   '05/01/2015 12:00:00' # or the current datetime datetime.datetime.now().strftime('%m/%d/%Y %H:%M:%S')
 		self.metadata.Run = sd['Run']
 
 
@@ -2865,6 +2996,10 @@ class sweep:
 		Q = 1.0/ ((1.0/cd['Qtl']) + (1.0/cd['Qc']))
 
 
+		############################# Cable Calbration
+		k = self.metadata.Cable_Calibration[Cable_Calibration_Key]
+		Preadout = lambda f: k[0]*np.sqrt(f)+k[1]*f+k[2] - self.metadata.Atten_NA_Output - self.metadata.Atten_At_4K
+		
 		############################## Make Pprobe Array
 		Pprobe_dBm = np.linspace(sd['Pprobe_dBm_Start'],sd['Pprobe_dBm_Stop'], sd['Pprobe_Num_Points'])
 		Pprobe = 0.001* np.power(10.0,Pprobe_dBm/10.0)
@@ -2913,7 +3048,7 @@ class sweep:
 		ax[1] = fig.add_subplot(1,1,1)
 		dff = (f - cd['f_0'])/cd['f_0']
 
-		system_attenuation_before_device = 50 # dB,  Difference between Preadout and Pinput
+		
 		
 		#Determine Sweep Direction
 		if sd['Up_or_Down'].lower() == 'up':
@@ -2949,7 +3084,7 @@ class sweep:
 										S21 = S21,
 										Frequencies = f, #Hz
 										Preadout_dB = Pprobe_dBm[index],
-										Pinput_dB = Pprobe_dBm[index] - system_attenuation_before_device,
+										Pinput_dB = Pprobe_dBm[index] - Preadout(cd['f_0']),
 										Is_Valid = True,
 										Mask = np.zeros(f.shape, dtype=np.bool),
 										Chi_Squared = 0,
@@ -2982,6 +3117,8 @@ class sweep:
 		self.pick_loop(default_index)
 
 		return fig, ax
+
+
 
 
 

@@ -1,7 +1,9 @@
 # run this code from terminal useing 'run -i Create_Library'
-
+import time
 import KAM
 reload(KAM)
+
+start = time.time()
 
 temp = KAM.thermometry()
 swp = KAM.sweep()
@@ -748,4 +750,6 @@ if Run44a:
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
 
-
+finished = time.time()
+elapsed = (finished - start )/60.0 #minutes
+print 'Library Creation took {:.2f} minutes'.format(elapsed)
