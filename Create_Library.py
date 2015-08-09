@@ -12,19 +12,20 @@ path = '/Users/miguel_daal/Desktop/Some_Data/'
 
 Find_Temperatures = 0
 Cable_Calibration = 1
-Run52b = 1
-Run51a = 1
-Run51b = 1
-Run49a = 1
-Run48a = 1
-Run48b = 1
-Run47a = 1
-Run46a = 1
-Run45b = 1
-Run45a = 1
-Run44b = 1
-Run44a = 1
-
+Run52b = 0
+Run51a = 0
+Run51b = 0
+Run49a = 0
+Run48a = 0
+Run48b = 0
+Run47a = 0
+Run46a = 0
+Run45b = 0
+Run45a = 0
+Run44b = 0
+Run44a = 0
+Save_Sonnet_Sims = 0
+Mock_Data = 1
 
 #############
 #
@@ -72,8 +73,8 @@ System_Calibration['AML016P3411'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= 
 
 F = [3000000., 3000000000]
 G = [1.,1]
-Nm = [2.7e12,2.7e12] #[120743991885170.77,120743991885170.77]#rms Peak Voltage Noise
-Np = Nm
+Nm = [1596471649,1596471649] #(1.15e-4)**2/(4*k*50*3000)#rms Peak Voltage Noise
+Np =  [1796739812,1796739812]# (1.22e-4)**2/(4*k*50*3000)
 P1dB = +20. # Fault power level. 
 System_Calibration['NA']  = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
 
@@ -375,7 +376,7 @@ if Run48a:
 		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
 		swp.save_hf5(overwrite = True)
 
-	if 1:	#TP Sweep
+	if 0:	#TP Sweep
 		filename = path + 'Run48a/TP_Sweep/48a_ScanData_70mK_201433101142.mat'	
 		swp.load_scandata(filename)
 		swp.Sweep_Array['Pinput_dB'] = np.round(swp.Sweep_Array['Pinput_dB']) #NA Rounding Error not fixed yet
@@ -749,6 +750,84 @@ if Run44a:
 		swp.metadata.Electrical_Delay = Electrical_Delay
 		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
 		swp.save_hf5(overwrite = True)
+
+
+
+
+if Save_Sonnet_Sims:
+	# Add Simulation data to Database
+	path = '/Users/miguel_daal/Desktop/Some_Data/'
+	swp = KAM.sweep()
+
+	filename = path + 'Resonator_Simulations/S3.s2p'
+	swp.load_touchstone(filename)
+	swp.metadata.Run = 'S3_Sim'
+	swp.save_hf5(overwrite = True)
+
+	filename = path + 'Resonator_Simulations/S4.s2p'
+	swp.load_touchstone(filename)
+	swp.metadata.Run = 'S4_Sim'
+	swp.save_hf5(overwrite = True)
+
+	filename = path + 'Resonator_Simulations/S5.s2p'
+	swp.load_touchstone(filename)
+	swp.metadata.Run = 'S5_Sim'
+	swp.save_hf5(overwrite = True)
+
+	filename = path + 'Resonator_Simulations/S6.s2p'
+	swp.load_touchstone(filename)
+	swp.metadata.Run = 'S6_Sim'
+	swp.save_hf5(overwrite = True)
+
+	filename = path + 'Resonator_Simulations/S7.s2p'
+	swp.load_touchstone(filename)
+	swp.metadata.Run = 'S7_Sim'
+	swp.save_hf5(overwrite = True)
+
+	filename = path + 'Resonator_Simulations/S8.s2p'
+	swp.load_touchstone(filename)
+	swp.metadata.Run = 'S8_Sim'
+	swp.save_hf5(overwrite = True)
+
+if Mock_Data:
+	import KAM
+	reload(KAM)	
+	Run45aP     = KAM.sweep(); Run45aP.load_hf5('/Run45a/T201402061732', filename = database_location);
+	
+	def Gen_Mock_Data_Sweep(Sweep, Indexing = (None,None,None)):
+		index = 0 
+		Sweep.pick_loop(index)
+		fit, fig, ax = Sweep.nonlinear_fit(Save_Fig = True, Indexing = Indexing)
+		Sweep.pick_loop(index)
+		
+
+		#Construct Simulated data for run  Sweep, then non-linear fit it, then construct sweep array including Concurrent and Stepwise fits and save
+		bestfit = 'Powell'
+		Zfl = Sweep.metadata.Feedline_Impedance
+		Zres = Sweep.metadata.Resonator_Impedance
+		V30V30 = fit['V30V30']
+		eta = fit[bestfit].x[4]
+		delta =  fit[bestfit].x[5]
+		f0 = fit[bestfit].x[0]
+		Qi = fit[bestfit].x[1]
+		Qc = fit[bestfit].x[2]
+		phi31 = fit[bestfit].x[3]
+		# use noise calculated from complete fit
+		#Amplitude_Noise_Variance = cfit['sigma_squared_m'][0]
+		#Phase_Noise_Variance = cfit['sigma_squared_p'][0]
+
+	
+		sweep  = KAM.sweep();
+		sweep.generate_nonlinear_data(Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None, Like = Sweep, Save_Fig = True,
+		curve_parameter_dict = {'f_0':f0, 'Qtl':Qi, 'Qc':Qc, 'eta':eta, 'delta':delta, 'Zfl':Zfl, 'Zres':Zres, 'phi31': phi31, 'phiV1':0, 'V30V30':V30V30 },
+		sweep_parameter_dict = {'Run': 'Mock_' + Sweep.metadata.Run, 'Pprobe_dBm_Start' :-100.0,'Pprobe_dBm_Stop': -54.0, 'Pprobe_Num_Points':17, 'numBW':40,'num': 2000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'})
+
+		sweep.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))
+		sweep.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False,Complete_Fit = True )
+		sweep.save_hf5(overwrite = True)
+		return sweep 
+	sweep = 	Gen_Mock_Data_Sweep(Run45aP, Indexing = (None,-1,None))#(None,-1,None)
+
 
 finished = time.time()
 elapsed = (finished - start )/60.0 #minutes

@@ -965,7 +965,7 @@ if 0: #Development of Complete Fit function
 	plot_fit()
 
 
-if 1:
+if 0:
 	Ver = 2
 	%run -i Load_Datasets.py
 
@@ -978,18 +978,19 @@ if 1:
 
 	# # Perform Nonlinear Fits and Save figures
 	index = 0 
-	# Run45aP.pick_loop(index)
-	# fit, fig, ax = Run45aP.nonlinear_fit(Save_Fig = True)
+	Run45aP.pick_loop(index)
+	fit, fig, ax = Run45aP.nonlinear_fit(Save_Fig = True)
 
+	##Not Good
+	## Run45bP.pick_loop(index) #invalid values in sqrt
+	## Run45bP.nonlinear_fit(Save_Fig = True)
 
-	# Run45bP.pick_loop(index) #invalid values in sqrt
-	# Run45bP.nonlinear_fit(Save_Fig = True)
-
-	# Run48aP.pick_loop(index)
-	# Run48aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-9,3))
+	##Not Good
+	##Run48aP.pick_loop(index)
+	##Run48aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-9,3))
 
 	# Run49aP.pick_loop(index)
-	# Run49aP.nonlinear_fit(Save_Fig = True, Indexing = (None,None,8))
+	# Run49aP.nonlinear_fit(Save_Fig = True, Indexing = (None,None,10))
 
 	# Run44aP.pick_loop(index)
 	# Run44aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-5,None))
@@ -997,38 +998,42 @@ if 1:
 
 	# Run46aPl.pick_loop(index)
 	# Run46aPl.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))
+	Run45aP.pick_loop(index)
+	cfit = Run45aP.complete_fit( Use_Mask = True, Verbose = False, Show_Plot = True, Save_Fig = True,Sample_Size = m)
 
 
 
+	#Construct Simulated data for run  Run45aP, then non-linear fit it, then construct sweep array including Concurrent and Stepwise fits and save
+	bestfit = 'Powell'
+	Zfl = Run45aP.metadata.Feedline_Impedance
+	Zres = Run45aP.metadata.Resonator_Impedance
+	V30V30 = fit['V30V30']
+	eta = fit[bestfit].x[4]
+	delta =  fit[bestfit].x[5]
+	f0 = fit[bestfit].x[0]
+	Qi = fit[bestfit].x[1]
+	Qc = fit[bestfit].x[2]
+	phi31 = fit[bestfit].x[3]
+	# use noise calculated from complete fit
+	Amplitude_Noise_Variance = cfit['sigma_squared_m'][0]
+	Phase_Noise_Variance = cfit['sigma_squared_p'][0]
 
-	##Construct Simulated data for run  Run45aP, then non-linear fit it, then construct sweep array including Concurrent and Stepwise fits and save
-	# bestfit = 'Powell'
-	# Zfl = Run45aP.metadata.Feedline_Impedance
-	# Zres = Run45aP.metadata.Resonator_Impedance
-	# V30V30 = fit['V30V30']
-	# eta = fit[bestfit].x[4]
-	# delta =  fit[bestfit].x[5]
-	# f0 = fit[bestfit].x[0]
-	# Qi = fit[bestfit].x[1]
-	# Qc = fit[bestfit].x[2]
-	# phi31 = fit[bestfit].x[3]
+	import KAM
+	reload(KAM)	
+	sweep  = KAM.sweep();
 
-	# import KAM
-	# reload(KAM)	
-	# sweep  = KAM.sweep();
+	sweep.generate_nonlinear_data(Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None, Like = Run45aP,
+		curve_parameter_dict = {'f_0':f0, 'Qtl':Qi, 'Qc':Qc, 'eta':eta, 'delta':delta, 'Zfl':Zfl, 'Zres':Zres, 'phi31': phi31, 'phiV1':0, 'V30V30':V30V30 },
+		sweep_parameter_dict = {'Run': 'Mock_45a', 'Pprobe_dBm_Start' :-100.0,'Pprobe_dBm_Stop': -54.0, 'Pprobe_Num_Points':17, 'numBW':40,'num': 2000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'})
 
-	# sweep.generate_nonlinear_data(Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None, Like = Run45aP,
-	# 	curve_parameter_dict = {'f_0':f0, 'Qtl':Qi, 'Qc':Qc, 'eta':eta, 'delta':delta, 'Zfl':Zfl, 'Zres':Zres, 'phi31': phi31, 'phiV1':0, 'V30V30':V30V30 },
-	# 	sweep_parameter_dict = {'Run': 'Mock_45a', 'Pprobe_dBm_Start' :-100.0,'Pprobe_dBm_Stop': -54.0, 'Pprobe_Num_Points':17, 'numBW':24,'num': 1000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'})
-
-	# sweep.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))
-
-
-
-	# sweep.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False,Complete_Fit = True )
+	sweep.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))
 
 
-	# sweep.save_hf5(overwrite = True)	
+
+	sweep.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False,Complete_Fit = True )
+
+
+	sweep.save_hf5(overwrite = True)	
 
 
 
@@ -1044,7 +1049,7 @@ if 1:
 
 	# ## Draw loops for Run45aP Data
 	for index in [0,8,9,11]:
-		m = 200
+		m = 100
 		print "plotting index {}".format(index)
 		Run45aP.pick_loop(index)
 		#fit(Run45aP)
@@ -1052,51 +1057,119 @@ if 1:
 		print 'chi^2: MP - {0}, G - {1} with m = {2}'.format(fit['cPowell'].fun, fit['sPowell'].fun,m)
 
 
-	# ### Draw loops for Simulated Run45aP Data
-	# for index in [0,8,9,11]:
-	# 	Run45aP_Mock.pick_loop(index)
-	# 	#fit(Run45aP_Mock)
-	# 	Run45aP_Mock.complete_fit( Use_Mask = True, Verbose = False , Show_Plot = True, Save_Fig = True)
+	### Draw loops for Simulated Run45aP Data
+	for index in [0,8,9,11]:
+		Run45aP_Mock.pick_loop(index)
+		#fit(Run45aP_Mock)
+		Run45aP_Mock.complete_fit( Use_Mask = True, Verbose = False , Show_Plot = True, Save_Fig = True)
+
+
+if 1: #test code for generating resonance loops
+	import KAM
+	reload(KAM)	
+	sweep  = KAM.sweep();
+
+	sweep.metadata.Electrical_Delay =  tau=0.
+	sweep.loop.index = 0 
+	sweep.loop.freq = freq = np.linspace(699.99e6, 700.01e6,8000)
+	fr = 700.e6
+	Qc = 500.e3
+	Q = 300.e3
+	#sweep.loop.r = Q/Qc
+	#sweep.loop.a = a = 1
+	#sweep.loop.b = b= .1
+	#sweep.loop.normalization = norm =  np.abs(np.complex(a,b))
+	R = 10
+	phi = (np.pi/180) * 10
+	theta = (np.pi/180) * 179
+	print 'phi is {}, and theta is {}'.format(phi*180/np.pi, theta*180/np.pi)
+
+	sweep.loop.z = z = R* np.exp(np.complex(0,theta))*np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+	#np.exp(np.angle(np.complex(a,b))) #norm *np.exp(np.complex(0,np.angle(np.complex(a,b))))*  44 (1/1)*np.complex(a,b)*
+
+	if 1:
+		#fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
+		#ax = fig.add_subplot(111,aspect='equal')
+		#line = ax.plot(z.real,z.imag,'b.', markersize = 1.5,  label = 'loop')
+		t = np.linspace(-np.pi,np.pi ,200)
+		#line = ax.plot(R*np.cos(t),R*np.sin(t),'b--', label = 'outer loop')
+		
+
+		sweep.circle_fit(Show_Plot=False)
+		zc = np.complex(sweep.loop.a,sweep.loop.b)
+		r = sweep.loop.r
+		#line = ax.plot([zc.real],[zc.imag],'yx', markersize = 10, markeredgewidth = 4, label = 'Center')
+		#line = line = ax.plot(zc.real + r*np.cos(t),zc.imag + r*np.sin(t),'r-', label = 'Circle Fit')
+		#line = ax.plot([0,zc.real],[0,zc.imag],'y', markersize = 1 , label = 'Zc vector')
+
+
+		sweep.phase_fit(Verbose = False)
 
 
 
-# In [1069]: run -i test.ipy
-# plotting index 0
-# chi^2: MP - 25.3154991731, G - 27.1373756113 with m = 50, 24.8873859775 with m = 100, 24.1438552501 with m = 150, 25.8816312351 with m = 200
-# plotting index 8
-# chi^2: MP - 188107.228488, G - 307921.402282 with m = 50, 334217.357809 with m = 100, 300443.516729 with m = 150, 291399.498326 with m = 200
-# plotting index 9
-# chi^2: MP - 389301.12478, G - 612868.411592 with m = 50, 502069.960955 with m = 100, 379468.407899 with m = 150, 478445.677522 with m = 200
-# plotting index 11
-# chi^2: MP - 809469.713953, G - 838031.703346 with m = 50, 738493.433572 with m = 100, 828972.132748 with m = 150, 798143.630758 with m = 200
+# In [1805]: run -i test.ipy
+# phi is -25.0, and theta is 20.0
+# phi + theta =  355.0 deg, and alpha  = ang(zc) = 29.8778792072 deg, theta_f is 145.122120793, ztheta offset is -48.1867292992 
 
-# In [1070]: run -i test.ipy
-# plotting index 0
-# chi^2: MP - 25.3154991731, G - 24.8873859775 with m = 100
-# plotting index 8
-# chi^2: MP - 188107.228488, G - 334217.357809 with m = 100
-# plotting index 9
-# chi^2: MP - 389301.12478, G - 502069.960955 with m = 100
-# plotting index 11
-# chi^2: MP - 809469.713953, G - 738493.433572 with m = 100
+# In [1806]: run -i test.ipy
+# phi is 25.0, and theta is -20.0
+# phi + theta =  365.0 deg, and alpha  = ang(zc) = 330.122120793 deg, theta_f is 214.877879207, ztheta offset is 21.5690291152 
 
-# In [1071]: run -i test.ipy
-# plotting index 0
-# chi^2: MP - 25.3154991731, G - 24.1438552501 with m = 150
-# plotting index 8
-# chi^2: MP - 188107.228488, G - 300443.516729 with m = 150
-# plotting index 9
-# chi^2: MP - 389301.12478, G - 379468.407899 with m = 150
-# plotting index 11
-# chi^2: MP - 809469.713953, G - 828972.132748 with m = 150
+# In [1807]: run -i test.ipy
+# phi is 25.0, and theta is 20.0
+# phi + theta =  404.999999998 deg, and alpha  = ang(zc) = 10.1221207928 deg, theta_f is 214.877879205, ztheta offset is 21.5690291152 
 
-# In [1072]: run -i test.ipy
-# plotting index 0
-# chi^2: MP - 25.3154991731, G - 25.8816312351 with m = 200
-# plotting index 8
-# chi^2: MP - 188107.228488, G - 291399.498326 with m = 200
-# plotting index 9
-# chi^2: MP - 389301.12478, G - 478445.677522 with m = 200
-# plotting index 11
-# chi^2: MP - 809469.713953, G - 798143.630758 with m = 200
+# In [1808]: run -i test.ipy
+# phi is -25.0, and theta is -20.0
+# phi + theta =  315.0 deg, and alpha  = ang(zc) = 349.877879207 deg, theta_f is 145.122120793, ztheta offset is -48.1867292992 
 
+# In [1839]: run -i test.ipy
+# phi is -25.0, and theta is -90.0
+# phi + theta =  605.0 deg, and alpha  = ang(zc) = 279.877879207 deg, theta_f is 145.122120793, ztheta offset is -48.1867292992 
+# guess algorith:  phi + theta =  -115.0 deg
+
+# In [1840]: run -i test.ipy
+# phi is 25.0, and theta is -90.0
+# phi + theta =  655.0 deg, and alpha  = ang(zc) = 260.122120793 deg, theta_f is 214.877879207, ztheta offset is 21.5690291152 
+# guess algorith:  phi + theta =  -65.0 deg
+
+# In [1841]: run -i test.ipy
+# phi is 25.0, and theta is 90.0
+# phi + theta =  474.999999998 deg, and alpha  = ang(zc) = 80.1221207928 deg, theta_f is 214.877879205, ztheta offset is 21.5690291152 
+# guess algorith:  phi + theta =  114.999999998 deg
+
+# In [1842]: run -i test.ipy
+# phi is -25.0, and theta is 90.0
+# phi + theta =  425.0 deg, and alpha  = ang(zc) = 99.8778792072 deg, theta_f is 145.122120793, ztheta offset is -48.1867292992 
+# guess algorith:  phi + theta =  65.0 deg
+
+# In [1843]: run -i test.ipy
+# phi is -25.0, and theta is 180.0
+# phi + theta =  515.0 deg, and alpha  = ang(zc) = 189.877879207 deg, theta_f is 145.122120793, ztheta offset is -48.1867292992 
+# guess algorith:  phi + theta =  155.0 deg
+
+# In [1844]: run -i test.ipy
+# phi is 25.0, and theta is -180.0
+# phi + theta =  565.0 deg, and alpha  = ang(zc) = 170.122120793 deg, theta_f is 214.877879207, ztheta offset is 21.5690291152 
+# guess algorith:  phi + theta =  -155.0 deg
+
+# In [1845]: run -i test.ipy
+# phi is 25.0, and theta is 0.0
+# phi + theta =  744.999999998 deg, and alpha  = ang(zc) = 350.122120793 deg, theta_f is 214.877879205, ztheta offset is 21.5690291152 
+# guess algorith:  phi + theta =  24.999999998 deg
+
+# In [1846]: run -i test.ipy
+# phi is -25.0, and theta is 0.0
+# phi + theta =  335.0 deg, and alpha  = ang(zc) = 9.87787920716 deg, theta_f is 145.122120793, ztheta offset is -48.1867292992 
+# guess algorith:  phi + theta =  -25.0 deg
+
+# In [1847]: run -i test.ipy
+# phi is -10.0, and theta is 135.0
+# phi + theta =  485.0 deg, and alpha  = ang(zc) = 139.228711 deg, theta_f is 165.771289, ztheta offset is -27.5375610916 
+# guess algorith:  phi + theta =  125.0 deg
+
+
+#xx In [1856]: run -i test.ipy
+# phi is 10.0, and theta is 135.0
+# phi + theta =  505.0 deg, and alpha  = ang(zc) = 130.771289 deg, theta_f is 194.228711, ztheta offset is 0.91986090755 
+# guess algorith:  phi + theta =  -35.0 deg

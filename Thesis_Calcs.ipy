@@ -1,0 +1,24 @@
+
+
+
+Ver = 2
+%run -i Load_Datasets.py
+
+
+	#Not Good
+	Run45bP.pick_loop(index) #invalid values in sqrt
+	Run45bP.nonlinear_fit(Save_Fig = True)
+
+	#Not Good
+	Run48aP.pick_loop(index)
+	Run48aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-9,3))
+
+	Run49aP.pick_loop(index)
+	Run49aP.nonlinear_fit(Save_Fig = True, Indexing = (None,None,10))
+
+	Run44aP.pick_loop(index)
+	Run44aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-5,None))
+
+
+	Run46aPl.pick_loop(index)
+	Run46aPl.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))

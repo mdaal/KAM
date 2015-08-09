@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.gridspec as gridspec
 
 import tables
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import datetime
 from scipy.optimize import minimize, curve_fit, leastsq# , root,newton_krylov, anderson
@@ -23,6 +24,11 @@ import warnings #trying to get a warning every time rather than just the first t
 warnings.filterwarnings('always')
 
 database_location = 'Data' + os.sep + 'My_Data_Library.h5'
+Working_Dir = os.getcwd()
+Plots_Dir = '/Users/miguel_daal/Documents/Projects/Thesis/Thesis/chap6/images/plots'
+if os.path.exists(Plots_Dir) == False:
+	print('Speficied plots directory does not exist... Using current directory')
+	Plots_Dir = Working_Dir
 
 
 try:
@@ -63,7 +69,7 @@ class loop:
 		self.Q_est = None
 
 		# intermediate fit quantities
-		self.normalization = 1 # probably should  get rid of
+		self.normalization = 1# used for nonlinear of  generated data probably should  get rid of
 		
 
 		# phase fit quantities
@@ -72,7 +78,9 @@ class loop:
 		self.Qi = None
 		self.fr = None 
 		self.FWHM = None
-		self.phi = None
+		self.phi = None # in  radians not degrees
+		self.theta = None # in  radians not degrees
+		self.R = None # outer loop radius
 		self.chisquare = None
 		self.pvalue = None
 		self.phase_fit_method = None
@@ -87,6 +95,8 @@ class loop:
 		self.cQi = None
 		self.cfr = None 
 		self.cphi = None
+		self.cR = None
+		self.ctheta = None
 		self.cchisquare = None
 		self.cphase_fit_success = None
 
@@ -96,6 +106,8 @@ class loop:
 		self.sQi = None
 		self.sfr = None 
 		self.sphi = None
+		self.sR = None
+		self.stheta = None
 		self.schisquare = None
 		self.sphase_fit_success = None
 
@@ -160,6 +172,7 @@ class metadata:
 
 		self.RTAmp = None
 		self.Digitizer = None
+
 
 
 class thermometry:
@@ -478,10 +491,12 @@ class sweep:
 			("Is_Valid"					, np.bool),
 			("Chi_Squared"              , np.float64),
 			("Mask"						, np.bool,(fsteps,)), # array mask selecting data used in phase fit
-			("R"						, np.float64),
-			("A"						, np.float64),
-			("B"						, np.float64),
-			("Normalization"			, np.float64),
+			("R"						, np.float64), #outer loop radius
+			("r"						, np.float64), # resonance loop radius	
+			("a"						, np.float64),	
+			("b"						, np.float64),
+			#("Normalization"			, np.float64),
+			("Theta"					, np.float64),
 			("Phi"						, np.float64),
 			("cQ"						, np.float64),
 			("cQc"						, np.float64),
@@ -489,12 +504,16 @@ class sweep:
 			("cIs_Valid"				, np.bool),
 			("cChi_Squared"             , np.float64),
 			("cPhi"						, np.float64),
+			("cTheta"					, np.float64),
+			("cR"						, np.float64),
 			("sQ"						, np.float64),
 			("sQc"						, np.float64),
 			("sFr"						, np.float64), # in Hz
 			("sIs_Valid"				, np.bool),
 			("sChi_Squared"             , np.float64),
 			("sPhi"						, np.float64),
+			("sTheta"					, np.float64),
+			("sR"						, np.float64),
 
 			#("S21_Processed"            , np.complex128, (fsteps,)), # Processed S21 used in phase fit 
 			])
@@ -764,6 +783,7 @@ class sweep:
 	
 		if pick_loop == True: #since there is only one loop in Sweep_Array, we might as well pick it as the current loop
 			self.pick_loop(0)
+			#self.normalize_loop()
 
 	def downsample_loop(self,N):
 		''' Reduce number of loop/freq data point by every Nth point and discarding all others'''
@@ -1059,6 +1079,7 @@ class sweep:
 		'''Use this function to pick the current loop/transmission data from withing the Sweep_Array. 
 		Index is the indes number of sweep/loop to be slected as the current loop.'''
 		self.loop.index = index 
+		#self.loop.normalization = None
 		self.loop.z = self.Sweep_Array[index]['S21']
 		self.loop.freq = self.Sweep_Array[index]['Frequencies']
 		
@@ -1335,7 +1356,7 @@ class sweep:
 				z = np.square(xx) + np.square(yy)
 				p = xx*c + yy*s
 				t = d*z - 2.0*p
-				g = t/(1+np.sqrt(1+d*t))
+				g = t/(1+np.sqrt(1.+d*t))
 				W = (z+p*g)/(2.0+d*g)
 				Z = z
 
@@ -1387,7 +1408,7 @@ class sweep:
 				p = xx*c + yy*s
 				t = 2.0*p - d*z 
 				w = np.sqrt(1.0-d*t)				
-				g = -1*t/(1.0+w)
+				g = -1.0*t/(1.0+w)
 				g1 = 1.0/(1.0+d*g)
 				gg1 = g*g1
 				gg2 = g/(2.0 + d * g)
@@ -1527,6 +1548,7 @@ class sweep:
 					if np.abs(new.a)>ParLimit2 or np.abs(new.b)>ParLimit2:
 						#when the circle is very large for the first time, check if 
 						#the best fitting line gives the best fit
+
 						if check_line:   # initially, check_line= True, then it is set to zero
 
 							#compute scatter matrix
@@ -1602,7 +1624,7 @@ class sweep:
 				exit_code  = 1
 
 			if old.inner_iterations  > IterMAX:
-				exit_code = 3
+				exit_code = 2
 
 			if (dmin <= 0.0) and (exit_code==0):
 				exit_code  = 3
@@ -1614,15 +1636,34 @@ class sweep:
 		
 
 
-		#initial guess
-		self.loop.a =  0
-		self.loop.b =  0
-		lambda_init = 0.001
 
 		x = S21.real
 		y = S21.imag
-	
-		self.loop = CircleFitByChernovHoussam(x,y, self.loop, lambda_init)
+
+
+		self.loop.a =  0#guess.real#0
+		self.loop.b =  0#guess.imag #0
+		lambda_init = 0.001
+		#self.loop = CircleFitByChernovHoussam(x,y, self.loop, lambda_init)
+		if True: #self.loop.circle_fit_exit_code != 0:
+			#print('Circle Fit Failed! Trying again...')
+			#another initial guess
+			norm = np.abs(S21[1:5].mean())
+			S21 = S21/norm
+			guess = np.mean(S21)
+			self.loop.a =  guess.real#0
+			self.loop.b =  guess.imag #0
+			lambda_init = 0.001
+			x = S21.real
+			y = S21.imag
+			self.loop = CircleFitByChernovHoussam(x,y, self.loop, lambda_init)
+			self.loop.a = self.loop.a*norm
+			self.loop.b = self.loop.b*norm
+			self.loop.r = self.loop.r*norm
+			self.loop.z = S21*norm
+
+			if self.loop.circle_fit_exit_code != 0:
+				print('!!!!!!!!!!!!!!    Circle Fit Failed Again! Giving Up...')
 
 		if Show_Plot:
 			fig, ax = self.plot_loop(show = False)[:2]		
@@ -1634,35 +1675,17 @@ class sweep:
 			plt.show()	
 
 	def phase_fit(self, Fit_Method = 'Multiple', Verbose = True, Show_Plot = True):
+		'''
+		Note: its best to determine angles and angle differences by starting with complex numbers 
+		(interpreted as vectors) and then finding their angles with, np.angle or self._angle. It is
+		not as accurate and prone to issues with domains (e.g. [-180,180]) to use arcsin or arccos.
+		'''
 		from scipy.stats import chisquare
 		
 		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
 		   Fit_Method={Fit_Method}
 		   
-		def angle(z, deg = 0):
-			''' If z is a masked array. angle(z) returns the angle of the elements of z
-			within the branch [0,360] instead of [-180, 180], which is the branch used
-			in np.angle(). The mask of angle(z) is set to be the mask of the input, z.
-
-			If z is not a masked array, then angle(z) is the same as np.angle except 
-			that range is [0,360] instead of [-180, 180]
-
-			If z is a vector, then an angle shift is added to z  so the z[0] is 0 degrees
-			If z is a number, then dont shift angle'''
-			a = np.angle(z, deg = deg)
-			try:
-				a = a - a[0] #if a is not a vector, then a[0] will throw an error
-			except:
-				pass
-			p = np.where(a<=0,1,0)
-			n = 2
-			units = n*np.pi if deg == 0 else n*180
-			try:
-				a = ma.array(a + p*units,mask =z.mask) 
-			except:
-				a = a + p*units #if z is not a masked array do this
-			return a
-
+		
 		j = np.complex(0,1)
 		try:
 			zc = self.loop.a + j*self.loop.b
@@ -1670,6 +1693,9 @@ class sweep:
 		except:
 			print('Phase fit needs loop center and radius, which are not currently defined. Aborting phase fit.')
 			return
+
+
+
 		f = f0 = self.loop.freq
 		z = z0 = self.loop.z
 		
@@ -1716,15 +1742,17 @@ class sweep:
 		f_lower_FWHM = f[lower_index]
 		FWHM_est = np.abs(f_upper_FWHM - f_lower_FWHM)
 		fr_est = f[zr_est_index]
-		theta_est = angle(z[zr_est_index])
+
 		
 		#consider refitting the circle here, or doing ellipse fit.
 
-		#translate circle to origin, and rotate so that z[zr_est_index] has angle 0
-		z = z2 = ma.array((z.data-zc)*np.exp(-j*(angle(zc)-np.pi)), mask = z.mask)
-		
+
+
+		#translate circle to origin, and rotate so that z[zr_est_index] has angle 0 
+		z = z2 = ma.array((z.data-zc)*np.exp(-j*(self._angle(zc))), mask = z.mask)
+
 		#Compute theta_est before radious cut to prevent radius cut from removing z[f==fr_est]
-		theta_est = angle(z[zr_est_index])	
+		theta_est = self._angle(z[zr_est_index]) #self._angle(z[zr_est_index])	
 
 		#Radius Cut: remove points that occur within r_cutoff of the origin of the centered data. 
 		#(For non-linear resonances that have spurious point close to loop center)	
@@ -1749,7 +1777,7 @@ class sweep:
 		N = 8
 		z = z4 = ma.masked_where((f > fr_est + N*FWHM_est) | (fr_est - N*FWHM_est > f),z,copy = True)
 		f = f4 = ma.array(f,mask = z.mask)
-		z_theta = angle(z)
+		z_theta,z_theta_offset =self._angle(z, return_offset = True) # dont used self._angle(z)!
 
 
 		#Angle jump cut : masks points where angle jumps to next branch of angle function, 
@@ -1817,13 +1845,13 @@ class sweep:
 
 		def obj(x,z_theta,f):
 			theta,fr,Q = x
-			return np.square(z_theta - theta - 2.0*np.arctan(2.0*Q*(1-f/fr))).sum()	 #<--- Need hessian of this
+			return np.square(z_theta + theta - 2.0*np.arctan(2.0*Q*(1-f/fr))).sum()	 #<--- Need hessian of this
 
 
 		def obj_ls(x,z_theta,f):
 			'''object fuctinon for least squares fit'''
 			theta,fr,Q = x
-			residual  = z_theta - theta - 2.0*np.arctan(2.0*Q*(1-f/fr))	
+			residual  = z_theta + theta - 2.0*np.arctan(2.0*Q*(1-f/fr))	
 			return residual
 
 		#p0 is the initial guess
@@ -1831,9 +1859,9 @@ class sweep:
 		
 		#Each fit method is saved as a lambda function in a dictionary called fit_func
 		fit_func = {}
-		fit_func['Powell'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
-		fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
-		fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
+		fit_func['Powell'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-20, callback=None, options={'disp':False, 'maxiter': 70, 'maxfev': 50000, 'ftol':1e-20,'xtol':1e-20})#options={'disp':False})
+		fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-18, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
+		fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-18, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
 
 		fit = {}
 		if isinstance(Fit_Method,set):      #All string inputs for Fit_Method were changed to sets at the begining of phase_fit
@@ -1874,16 +1902,28 @@ class sweep:
 				lowest = fit[key].fun
 				bestfit = key
 		
+
+		theta0 = 2*np.pi - self._angle(np.exp(np.complex(0,fit[bestfit].x[0] - z_theta_offset)).conj())
+		zc_m = np.abs(zc)
+		R = np.sqrt(zc_m*zc_m + r*r -2.0*zc_m*r*np.cos(theta0) ) # Used in Qc
+
+		alpha = self._angle(zc)#np.angle(zc)#
+		z_pivot = zc + (np.complex(-r*np.cos(theta0), r*np.sin(theta0)))*np.complex(np.cos(alpha),np.sin(alpha))# vector for origin to pizot point
+		theta = self._angle(z_pivot)
+		phi  = np.angle(-(zc-z_pivot)*np.exp(-j*(self._angle(z_pivot)))) #not that domain is [-180, +180]
+
+		self.loop.R = R
 		self.loop.phase_fit_success = fit[bestfit].success
 		self.loop.phase_fit_z = z5.data
 		self.loop.phase_fit_mask = z5.mask
 		self.loop.phase_fit_method = bestfit
 		self.loop.Q = Q = fit[bestfit].x[2]
-		self.loop.Qc = Qc = Q/(2*r)
+		self.loop.Qc = Qc = Q*R/(2*r)
 		self.loop.Qi = Q*Qc/(Qc-Q)
 		self.loop.fr = fr = fit[bestfit].x[1]
 		self.loop.FWHM = fr/Q
-		self.loop.phi = (fit[bestfit].x[0]-1*np.pi)*180/np.pi
+		self.loop.phi = phi # radian
+		self.loop.theta = theta # radian
 		self.loop.chisquare, self.loop.pvalue = chisquare( z_theta_c,f_exp=fit[bestfit].x[0] + 2.0*np.arctan(2.0*Q*(1-f_c/fr)))
 		self.loop.chisquare = self.loop.chisquare/ f_c.shape[0]
 		#estimated quantities from MAG S21 
@@ -1891,13 +1931,72 @@ class sweep:
 		self.loop.FWHM_est = FWHM_est
 		self.loop.depth_est = depth_est
 		self.loop.Q_est = Q_est
+		
+
+
+		# print 'phi + theta =  {0} deg'.format((phi+theta)*180/np.pi)
+		# # abs_phi = np.arcsin(np.angle(z_pivot/zc)*(np.abs(zc)/r))
+		# # #if theta > alpha:
+
+		# # print 'theta is {} '.format(theta*180/np.pi)
+		# # print 'phi is {}'.format( abs_phi*180/np.pi)
+		# # #when -r*np.sin(theta0) is negative, phi is positive
+		# # np.angle(-(zc-z_pivot)*np.exp(-j*(self._angle(z_pivot))))
+		# # print 'phi is {}'.format(np.angle(-(zc-z_pivot)*np.exp(-j*(self._angle(z_pivot))))*180/np.pi)
+		
+
+
+		# alpha = self._angle(zc)#np.angle(zc)#
+		# theta_f = -1.*(fit[bestfit].x[0] - z_theta_offset) # minus becasue of how "theta" is the objective function obj()
+		# phi_theta = theta_f + alpha + np.pi #np.fmod(theta_f + alpha, np.pi) # return angle in th domain [+pi,-pi]
+		# print 'phi + theta =  {0} deg, and alpha  = ang(zc) = {1} deg, theta_f is {2}, ztheta offset is {3} '.format((phi_theta)*180/np.pi,alpha*180/np.pi , theta_f*180/np.pi, z_theta_offset*180/np.pi)
+		
+		# def rectify_angle(ang, offset,alpha):
+		# 	''' output correct angle in domain [-pi, pi]
+		# 	'''
+
+		# 	s = np.sign(offset)
+		# 	if (alpha < np.pi/2. ) | (alpha > 3*np.pi/2.):
+		# 		if s > 0:
+		# 			return np.mod(ang, np.pi)
+		# 		else:
+		# 			return np.mod(ang, np.pi) - np.pi
+		# 	else:
+		# 		if s > 0:
+		# 			return np.mod(ang, np.pi) - np.pi
+		# 		else:
+		# 			return np.mod(ang, np.pi) 
+
+		# print 'guess algorith:  phi + theta =  {0} deg'.format(rectify_angle(phi_theta, z_theta_offset, alpha)*180/np.pi)
+		# print 'theta is {0} deg, and zc is {1} deg, offset is {2}'.format((fit[bestfit].x[0] -z_theta_offset )*180/np.pi,self._angle(zc)*180/np.pi , z_theta_offset*180/np.pi)
+		# print 'phi is {}'.format((180/np.pi)*phi)
+
+
+		#self.loop.phi = rectify_angle(phi, z_theta_offset, alpha)
+		#self.loop.theta = rectify_angle(theta, z_theta_offset, alpha) #theta#(self._angle(zc)-(fit[bestfit].x[0] - z_theta_offset )- 1*np.pi)
+
+		# zc_m = np.abs(zc)
+		# leg = np.sqrt(zc_m*zc_m + r*r -2.0*zc_m*r*np.cos(rectify_angle(theta_f, z_theta_offset, alpha)) )
+		# phi = np.arcsin(zc_m*np.sin(theta_f)/leg)
+		# theta =  rectify_angle(phi_theta, z_theta_offset, alpha)- phi
+		# print  'theta =  {0} deg, and phi  = {1} deg'.format((theta)*180/np.pi,phi*180/np.pi)
+
+		# def recify_offset(ang):
+		# 	if ang<0:
+		# 		ang = 2.*np.pi - ang
+		# 	return ang
+		# alpha = self._angle(zc)#np.angle(zc)#
+		# theta_f = -1.*(fit[bestfit].x[0] + recify_offset(z_theta_offset)) # minus becasue of how "theta" is the objective function obj()
+		# phi_theta = theta_f + alpha + np.pi #np.fmod(theta_f + alpha, np.pi) # return angle in th domain [+pi,-pi]
+		# print 'phi + theta =  {0} deg, and alpha  = ang(zc) = {1} deg, theta_f is {2}, ztheta offset is {3} '.format((phi_theta)*180/np.pi,alpha*180/np.pi , theta_f*180/np.pi, z_theta_offset*180/np.pi)
+		# print 'guess algorith:  phi + theta =  {0} deg'.format(rectify_angle(phi_theta, z_theta_offset, alpha)*180/np.pi)
 
 		if Verbose: 
 			print('Duplicates cuts:\n\t{0} duplicate frequencies removed from loop data, {1} remaining data points'.format(*self._points_removed(z0,z1)))
 			print('Radius cut:\n\t{2} points < r_loop*{0} or > r_loop*{1} found and removed, {3} remaining data points'.format(r_fraction_in, r_fraction_out,*self._points_removed(z2,z3)))
 			print('Bandwidth cut:\n\t{1} points outside of fr_est +/- {0}*FWHM_est removed, {2} remaining data points'.format(N, *self._points_removed(z3,z4)))
 			print('Angle jump cut:\n\t{0} points with discontinuous jumps in loop angle removed, {1} remaining data points'.format(*self._points_removed(z4,z5)))
-			print('Initial Guess:\n\tLoop rotation {0}, fr {1}, Q {2}'.format(*p0))
+			print('Initial Guess:\n\tLoop rotation {0} deg, fr {1}, Q {2}'.format(p0[0]*180/np.pi,p0[1],p0[2] ))
 
 			for method in fit.keys():
 				print('\n{0} Minimzation Result:\n{1}\n'.format(method,fit[method]))
@@ -1911,6 +2010,8 @@ class sweep:
 			ax.set_title('Number of points used in fit = '+str(total_used_in_fit)+', Number of points removed = ' + str(total_removed) )
 			#line = ax.plot(f1[~f5.mask], np.abs(z1[~z5.mask]),'g-', label = 'Used for Fit') #fails when no points are masked
 			
+
+
 			if f5.mask.size <= 1:#this is the case that there are no masked points, e.g. no mask. there will allways be 1 point in the mask due to adjacent distance
 				line = ax.plot(ma.compressed(f1), np.abs(ma.compressed(z1)),'g-', label = 'Used for Fit')
 			else:
@@ -1919,6 +2020,10 @@ class sweep:
 			line = ax.plot([f1[zr_est_index],f1[zr_est_index]] , [np.abs(z1[zr_est_index]),np.abs(zc)+r] ,'k.', label = 'Magitude Min and Max')
 			line = ax.plot([f1[lower_index], f1[upper_index], f1[upper_index]], np.abs([z1[lower_index],z1[lower_index],z1[upper_index]]),'yo-', label = 'FWHM Estimate')
 			ax.set_ylabel('Magnitude')
+			## Find index of closet freq point to Fr
+			a = np.square(np.abs(f1 - fr))
+			fr_index = np.argmin(a)
+			line = ax.plot(f1[fr_index], np.abs(z1[fr_index]),'gx', markersize = 7, markeredgewidth = 4, label = 'Fr (closest)')# this is the closest point in  the cut z1 to the true fr 
 			ax.legend(loc = 'best', fontsize=10,scatterpoints =1, numpoints = 1, labelspacing = .1)
 			
 			
@@ -1928,6 +2033,14 @@ class sweep:
 			line = ax.plot(zc.real + r*np.cos(t),zc.imag + r*np.sin(t),'y-', label = 'Circle Fit')		
 			line = ax.plot(z1.real, z1.imag,'r:', label = 'Initial Location')
 			line = ax.plot(z3.real, z3.imag,'r-', label = 'Aligned w/ Origin')
+			lint = ax.plot([0,z_pivot.real],[0,z_pivot.imag],'yo-', label = 'Pivot point')
+			lint = ax.plot([zc.real,z_pivot.real],[zc.imag,z_pivot.imag],'yo-', label = '_zc_to_zp')#zp is zpivot
+			## Find index of closet freq point to Fr
+			a = np.square(np.abs(f_c - fr))
+			fr_index = np.argmin(a)
+			line = ax.plot(z_c[fr_index].real, z[fr_index].imag,'gx', markersize = 7, markeredgewidth = 4, label = 'Fr (closest)')
+			line = ax.plot([0,r*np.cos(theta0)],[0,-r*np.sin(theta0)], 'b',  label = 'Fr (True)') #vector to fr
+			
 			line = ax.plot(z4.real, z4.imag,'g:', linewidth = 3,label = 'Bandwidth Cut')
 			##pt = ax.plot([z1[0].real,z[~z.mask][0].real], [z1[0].imag,z[~z.mask][0].imag],'ko', label = 'First Point') fails when no points are masked
 			pt = ax.plot([z1[0].real,ma.compressed(z5)[0].real], [z1[0].imag,ma.compressed(z5)[0].imag],'ko', label = 'First Point') #--
@@ -1935,12 +2048,13 @@ class sweep:
 
 			#line = ax.plot(z4[z4.mask].data.real, z4[z4.mask].data.imag,'r.', alpha = 0.2, label = 'Excluded Data')
 			line = ax.plot(z5[ma.getmaskarray(z5)].data.real, z5[ma.getmaskarray(z5)].data.imag,'r.', alpha = 0.2,label = 'Excluded Data')
-			ax.legend(loc = 'best', fontsize=10, scatterpoints =1, numpoints = 1, labelspacing = .1)#,numpoints)
+			ax.legend(loc = 'center left', bbox_to_anchor=(1.01, 0.5), fontsize=10, scatterpoints =1, numpoints = 1, labelspacing = .1)#,numpoints)
 			
 			text = ('$*Resonator Properties*$\n' + '$Q =$ ' + '{0:.2f}'.format(self.loop.Q) +'\nf$_0$ = ' + '{0:.6f}'.format(self.loop.fr/1e6) 
 				+  ' MHz\n$Q_c$ = ' + '{0:.2f}'.format(self.loop.Qc) + '\n$Q_i$ = ' + '{0:.2f}'.format(self.loop.Qi) + '\n|S$_{21}$|$_{min}$ = ' 
 				+ '{0:.3f}'.format(self.loop.depth_est) + ' dB' + '\nBW$_{FWHM}$ = ' + '{0:.3f}'.format(self.loop.FWHM/1e3) +  ' kHz' 
-				+ '\n$\chi^{2}$ = ' + '{0:.4f}'.format(self.loop.chisquare) + '\n$\phi$ = ' + '{0:.3f}'.format(self.loop.phi) +' deg' + '\n$- $'+self.loop.phase_fit_method 
+				+ '\n$\chi^{2}$ = ' + '{0:.4f}'.format(self.loop.chisquare) + '\n$\phi$ = ' + '{0:.3f}'.format(self.loop.phi*180/np.pi) +' deg' + '\n' + r'$\theta$ = ' 
+				+ '{0:.3f}'.format(self.loop.theta*180/np.pi) +' deg' +'\n$- $'+self.loop.phase_fit_method 
 				+ ' fit $-$') 
 			bbox_args = dict(boxstyle="round", fc="0.8")        
 			fig1.text(0.10,0.7,text,
@@ -1952,7 +2066,7 @@ class sweep:
 			hline = ax.axhline(y = fit[bestfit].x[0],linewidth=2, color='y', linestyle = '-.',   label = r'$\theta_{r}$')
 			vline = ax.axvline(x = fit[bestfit].x[1],linewidth=2, color='y', linestyle = ':',   label = r'$f_{r}$')
 			line = ax.plot(f,z_theta,'g-',linewidth = 3,label = 'Data')
-			line = ax.plot(f,(fit[bestfit].x[0] + 2.0*np.arctan(2.0*fit[bestfit].x[2]*(1-f/fit[bestfit].x[1]))),'g:', linewidth = 1, label = 'Fit ')
+			line = ax.plot(f,(-fit[bestfit].x[0] + 2.0*np.arctan(2.0*fit[bestfit].x[2]*(1-f/fit[bestfit].x[1]))),'g:', linewidth = 1, label = 'Fit ')
 			#line = ax.plot(f5[~f5.mask][0],z_theta5[~z_theta5.mask][0],'ko',linewidth = 3,label = 'First Point') #Failes when  no points are masked
 			line = ax.plot(ma.compressed(f5)[0],ma.compressed(z_theta5)[0],'ko',linewidth = 3,label = 'First Point')
 
@@ -2047,13 +2161,15 @@ class sweep:
 				self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
 
 				# Normalize Loop
-				self.normalize_loop() # should not need to use this
+				#self.normalize_loop() 
 
 				# Remove Cable Delay
 				self.remove_cable_delay(Show_Plot = False, Verbose = False)	# should do nothing if a delay is defined in metadata
 
 				# Fit loop to circle
 				self.circle_fit(Show_Plot = False)
+				if self.loop.circle_fit_exit_code != 0:
+					self._define_sweep_array(index, Is_Valid = False)
 
 				# Fit resonance parameters
 				self.phase_fit(Fit_Method = 'Multiple',Verbose = False, Show_Plot = False)
@@ -2064,18 +2180,22 @@ class sweep:
 												Fr = self.loop.fr,
 												Mask = self.loop.phase_fit_mask,
 												Chi_Squared = self.loop.chisquare,
-												R = self.loop.r,
-												A = self.loop.a,
-												B = self.loop.b,
-												Normalization  = self.loop.normalization,
+												R = self.loop.R,
+												r = self.loop.r,
+												a = self.loop.a,
+												b = self.loop.b,
+												#Normalization  = self.loop.normalization,
+												Theta = self.loop.theta,
 												Phi = self.loop.phi)
 
 				if Complete_Fit:
-					self.complete_fit()
+					self.complete_fit(Use_Mask = True, Verbose = False , Show_Plot = False, Save_Fig = False, Sample_Size = 100, Use_Loop_Data = True)
 					self._define_sweep_array(index, cQ = self.loop.cQ,
 													cQc = self.loop.cQc,
 													cFr = self.loop.cfr,
 													cPhi = self.loop.cphi,
+													cTheta = self.loop.ctheta,
+													cR = self.loop.cR,
 													cChi_Squared = self.loop.cchisquare,
 													cIs_Valid = self.loop.cphase_fit_success if self.Sweep_Array['Is_Valid'][index] else self.Sweep_Array['Is_Valid'][index],
 
@@ -2083,6 +2203,8 @@ class sweep:
 													sQc = self.loop.sQc,
 													sFr = self.loop.sfr,
 													sPhi = self.loop.sphi,
+													sTheta = self.loop.stheta,
+													sR = self.loop.sR,
 													sChi_Squared = self.loop.schisquare,
 													sIs_Valid = self.loop.sphase_fit_success if self.Sweep_Array['Is_Valid'][index] else self.Sweep_Array['Is_Valid'][index]
 													)
@@ -2119,39 +2241,20 @@ class sweep:
 			del(self.loop)
 			self.loop = loop()
 		print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
-	
-	
-	def complete_fit(self, Use_Mask = True, Verbose = False , Show_Plot = False, Save_Fig = True, Sample_Size = 100):
+
+
+	def _construct_readout_chain(self, F):
 		'''
-		Sample_Size is the number of points used to extablish \sigma^2 for the gaussian noise model
+		F is a frequency array.
+		Constructs gain, Tn_m (T noise magnitude), and Tn_p (phase)  lists.
+		Each element of list corresponds to a component, e.g. primary amp, cable 1, second amp, attenator,.
+		The order of the list correspondes to the order of components in the readout chain. First element is the first component (e.g. the primary amp)
+		Each element of the list is an array the same shape as F. Each element of the arrays is the gain, Tn_m (T noise magnitude), and Tn_p (phase) at that frequency.
+
+		This method does not use self.loop. data. It only uses self.metadata
 		'''
-		k = constants.value('Boltzmann constant') #unit is [J/k]
-		BW = self.metadata.IFBW #unit is [Hz]	 
 		SC = self.metadata.System_Calibration # contains Noise powers, gains and P1dB of readout devices
 		CC = self.metadata.Cable_Calibration # cable loss fit coefficients
-		
-		
-		R = 50 #system impedance
-		
-
-		if Use_Mask:
-			F = ma.array(self.Sweep_Array[self.loop.index]['Frequencies'],mask = self.Sweep_Array[self.loop.index]['Mask'])
-			F = F.compressed()
-			S21 = ma.array(self.Sweep_Array[self.loop.index]['S21'],mask = self.Sweep_Array[self.loop.index]['Mask'])
-			S21 = S21.compressed()
-		else:
-			F = self.Sweep_Array[self.loop.index]['Frequencies']
-			S21 = self.Sweep_Array[self.loop.index]['S21']
-
-		P_NA_out_dB = self.Sweep_Array[self.loop.index]['Pinput_dB'] #'out' as in our of NA, change of reference point
-		P_NA_out_V2 = .001 * np.power(10,P_NA_out_dB/10) *2 *R 
-		P_NA_in_V2 = np.square(np.abs(S21)) * P_NA_out_V2
-
-		Fit_Method = 'Multiple'
-		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
-		   Fit_Method={Fit_Method}
-
-
 
 		# Chain is the string of readout cables and amplifiers/devices
 		chain  = []
@@ -2169,7 +2272,7 @@ class sweep:
 			chain.append('Atten_NA_Input')
 
 
-		#chain.append('NA')
+		chain.append('NA')
 
 		passive_device_temp = {'300K_to_4K' : (290.+4.)/2, 'One_Way_300K': 290., 'Atten_NA_Input':290.}
 		Tn_p_s = []
@@ -2195,7 +2298,7 @@ class sweep:
 				continue
 
 			if device is 'Atten_NA_Input':
-				g =  -np.abs(self.metadata.Atten_NA_Input)
+				g =  -np.abs(self.metadata.Atten_NA_Input)*np.ones_like(F)
 				g = np.power(10.0,g/10.0)
 				g_s.append(g)
 				Tn = ((1.0/g)-1)*passive_device_temp[device]
@@ -2204,8 +2307,103 @@ class sweep:
 				continue
 
 			# warn me if the component is missing from calibration data
-			print('Component not found in calibration data!!')
-			1/0
+			print('Component in readout chain is not found in calibration data!! Aborting')
+			return 
+		return	g_s , Tn_m_s ,Tn_p_s
+	
+	def complete_fit(self, Use_Mask = True, Verbose = False , Show_Plot = False, Save_Fig = False, Sample_Size = 100, Use_Loop_Data = False):
+		'''
+		Sample_Size is the number of points used to extablish \sigma^2 for the gaussian noise model
+
+		if Use_Loop_Data = True then values of Q, Qc, fr, phi are for initial guess are taken from curret loop object. If false, values come from self.Sweep_Array
+		'''
+
+
+		if self.loop.index == None:
+			print 'Loop index is not specified. please pick_loop... Aborting'
+			return
+
+		Fit_Method = 'Multiple'
+		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
+		   Fit_Method={Fit_Method}
+
+
+
+
+		k = constants.value('Boltzmann constant') #unit is [J/k]
+		BW = self.metadata.IFBW #unit is [Hz]	 
+		# SC = self.metadata.System_Calibration # contains Noise powers, gains and P1dB of readout devices
+		# CC = self.metadata.Cable_Calibration # cable loss fit coefficients
+		R = 50 #system impedance
+
+		if Use_Mask:
+			F = ma.array(self.Sweep_Array[self.loop.index]['Frequencies'],mask = self.Sweep_Array[self.loop.index]['Mask'])
+			F = F.compressed()
+			S21 = ma.array(self.Sweep_Array[self.loop.index]['S21'],mask = self.Sweep_Array[self.loop.index]['Mask'])
+			S21 = S21.compressed()
+		else:
+			F = self.Sweep_Array[self.loop.index]['Frequencies']
+			S21 = self.Sweep_Array[self.loop.index]['S21']
+
+		P_NA_out_dB = self.Sweep_Array[self.loop.index]['Pinput_dB'] #'out' as in our of NA, change of reference point
+		P_NA_out_V2 = .001 * np.power(10,P_NA_out_dB/10) *2 *R 
+		P_NA_in_V2 = np.square(np.abs(S21)) * P_NA_out_V2
+
+
+		g_s , Tn_m_s ,Tn_p_s = self._construct_readout_chain(F)
+		# # Chain is the string of readout cables and amplifiers/devices
+		# chain  = []
+		# if self.metadata.LNA['LNA'] is not None:
+		# 	chain.append(self.metadata.LNA['LNA'])
+
+		# chain.append('300K_to_4K')
+
+		# if self.metadata.RTAmp_In_Use:
+		# 	chain.append(self.metadata.RTAmp) 
+
+		# chain.append('One_Way_300K')
+
+		# if (self.metadata.Atten_NA_Input is not None) and (self.metadata.Atten_NA_Input>0):
+		# 	chain.append('Atten_NA_Input')
+
+
+		# chain.append('NA')
+
+		# passive_device_temp = {'300K_to_4K' : (290.+4.)/2, 'One_Way_300K': 290., 'Atten_NA_Input':290.}
+		# Tn_p_s = []
+		# Tn_m_s = []
+		# g_s = []
+		# for i in xrange(len(chain)):
+		# 	device = chain[i]
+		# 	if device in CC.keys():
+		# 		g = CC[device][0]*np.sqrt(F)+CC[device][1]*F+CC[device][2]
+		# 		g = np.power(10.0,g/10.0)
+		# 		g_s.append(g)
+		# 		Tn = ((1.0/g)-1)*passive_device_temp[device]
+		# 		Tn_p_s.append(Tn)
+		# 		Tn_m_s.append(Tn)
+		# 		continue
+
+		# 	if device in SC.keys():
+		# 		g = np.polynomial.chebyshev.chebval(F,SC[device]['g_fit'])
+		# 		g = np.power(10.0,g/10.0)
+		# 		g_s.append(g)
+		# 		Tn_p_s.append(np.polynomial.chebyshev.chebval(F,SC[device]['Tn_p_fit']))
+		# 		Tn_m_s.append(np.polynomial.chebyshev.chebval(F,SC[device]['Tn_m_fit']))
+		# 		continue
+
+		# 	if device is 'Atten_NA_Input':
+		# 		g =  -np.abs(self.metadata.Atten_NA_Input)*np.ones_like(F)
+		# 		g = np.power(10.0,g/10.0)
+		# 		g_s.append(g)
+		# 		Tn = ((1.0/g)-1)*passive_device_temp[device]
+		# 		Tn_p_s.append(Tn)
+		# 		Tn_m_s.append(Tn)
+		# 		continue
+
+		# 	# warn me if the component is missing from calibration data
+		# 	print('Component in readout chain is not found in calibration data!! Aborting')
+		# 	return 
 
 
 		######
@@ -2220,12 +2418,14 @@ class sweep:
 		# sigma_squared_p = 4.0*k*R*g_tot*self.metadata.IFBW* Tn_p_tot
 		#####
 
-		BW = self.metadata.IFBW
+		
 		sigma_squared_m = np.zeros_like(F)
 		sigma_squared_p = np.zeros_like(F)
-		n = len(chain)
+		n = len(g_s)
+		
 		for i in xrange(n):
-			s2_m = 4*k*Tn_m_s[i]*R*BW
+			
+			s2_m = 4*k*Tn_m_s[i]*R*BW # This sigma for the particular stage of the readout chain
 			s2_p = 4*k*Tn_p_s[i]*R*BW
 			#we assume s2_p * 4 * P_NA_in_V2 = s2_m ,  s2_p measured in radian^2
 			sigma_squared_m = sigma_squared_m + s2_m*np.prod(g_s[i:], axis = 0) #rememebr g is a list of np vectors
@@ -2233,27 +2433,42 @@ class sweep:
 
 
 
-		# a_0,b_0  = self.loop.a, self.loop.b
-		# tau_0    = self.metadata.Electrical_Delay
-		# Q_0      = self.loop.Q 
-		# Qc_0     = self.loop.Qc 
-		# fr_0     = self.loop.fr 
-		# phi_0    = (self.loop.phi * np.pi/180) + 0*np.pi
 
-		a_0,b_0  = self.Sweep_Array[self.loop.index]['A'], self.Sweep_Array[self.loop.index]['B']
-		tau_0    = self.metadata.Electrical_Delay
-		Q_0      = self.Sweep_Array[self.loop.index]['Q']
-		Qc_0     = self.Sweep_Array[self.loop.index]['Qc']
-		fr_0     = self.Sweep_Array[self.loop.index]['Fr'] 
-		phi_0    = (self.Sweep_Array[self.loop.index]['Phi'] * np.pi/180) + 0*np.pi
-		norm     = self.Sweep_Array[self.loop.index]['Normalization'] 
+		if Use_Loop_Data == False:
+			#a_0,b_0  = self.Sweep_Array[self.loop.index]['a'], self.Sweep_Array[self.loop.index]['b']
+			R_0        = self.Sweep_Array[self.loop.index]['R']
+			theta_0    = self.Sweep_Array[self.loop.index]['Theta']
+			tau_0    = self.metadata.Electrical_Delay
+			Q_0      = self.Sweep_Array[self.loop.index]['Q']
+			Qc_0     = self.Sweep_Array[self.loop.index]['Qc']
+			fr_0     = self.Sweep_Array[self.loop.index]['Fr'] 
+			phi_0    = self.Sweep_Array[self.loop.index]['Phi']#(self.Sweep_Array[self.loop.index]['Phi'] * np.pi/180) + 0*np.pi
+			norm     = 1#self.Sweep_Array[self.loop.index]['Normalization'] 
+		else:
+			#a_0,b_0  = self.loop.a, self.loop.b
+			R_0      = self.loop.R
+			theta_0  = self.loop.theta
+			tau_0    = self.metadata.Electrical_Delay
+			Q_0      = self.loop.Q 
+			Qc_0     = self.loop.Qc 
+			fr_0     = self.loop.fr 
+			phi_0    = self.loop.phi# (self.loop.phi * np.pi/180) + 0*np.pi
+			norm     = 1#self.loop.normalization
+
+
 
 		#p0 is the initial guess
-		p0 = np.array([a_0,b_0,tau_0,Q_0, Qc_0, fr_0, phi_0])
+		#p0 = np.array([a_0,b_0,tau_0,Q_0, Qc_0, fr_0, phi_0])
+		p0 = np.array([R_0, theta_0,tau_0,Q_0, Qc_0, fr_0, phi_0])
 
-		def obj(x,s21, sigma_squared_m,sigma_squared_p ,freq):
-			a,b,tau,Q, Qc, fr, phi= x
-			s21_fit  = norm * np.exp(np.complex(0.,np.angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+		def obj(x,s21, sigma_squared_m,sigma_squared_p ,freq):# phase / magnitude fit
+			# a,b,tau,Q, Qc, fr, phi= x
+			# s21_fit  = norm * np.exp(np.complex(0.,np.angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+			R,theta,tau,Q, Qc, fr, phi= x
+			s21_fit  = norm * R* np.exp(np.complex(0.,theta)) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+	
+			
+
 			# diff = s21 - s21_fit
 			# frac = (diff*diff.conj()).real/sigma_squared_m
 			# #frac = (np.square(diff.real)/sigma_squared_m) + (np.square(diff.imag)/sigma_squared_m)
@@ -2272,9 +2487,13 @@ class sweep:
 			sigma_squared = sigma_squared + np.square(np.abs(S21_Sample[i] - S21_Sample[i+1]))
 		sigma_squared = sigma_squared/(2.0*Sample_Size)
 		
-		def obj_s(x,s21, sigma_squared ,freq):
-			a,b,tau,Q, Qc, fr, phi= x
-			s21_fit  = norm * np.exp(np.complex(0.,np.angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+		def obj_s(x,s21, sigma_squared ,freq): # gaussian fit
+			# a,b,tau,Q, Qc, fr, phi= x
+			# s21_fit  = norm * np.exp(np.complex(0.,np.angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+			R,theta,tau,Q, Qc, fr, phi= x
+			s21_fit  = norm * R* np.exp(np.complex(0.,theta)) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+
+
 			# diff = s21 - s21_fit
 			# frac = (diff*diff.conj()).real/sigma_squared_m
 			# #frac = (np.square(diff.real)/sigma_squared_m) + (np.square(diff.imag)/sigma_squared_m)
@@ -2320,8 +2539,9 @@ class sweep:
 		# 		lowest = fit[key].fun
 		# 		bestfit = key
 
-		cfit = 'cPowell'
-		ca, cb, ctau = fit[cfit].x[0], fit[cfit].x[1], fit[cfit].x[2]
+		cfit = 'cPowell' # phase / mag chi squared 
+		#ca, cb, ctau = fit[cfit].x[0], fit[cfit].x[1], fit[cfit].x[2]
+		self.loop.cR, self.loop.ctheta, ctau = cR, ctheta, ctau = fit[cfit].x[0], fit[cfit].x[1], fit[cfit].x[2]
 		self.loop.cQ = cQ = fit[cfit].x[3]	
 		self.loop.cQc = cQc = fit[cfit].x[4]	
 		self.loop.cQi = cQi = 1.0/ ((1./self.loop.cQ ) - (1./self.loop.cQc )) 
@@ -2330,8 +2550,9 @@ class sweep:
 		self.loop.cchisquare = fit[cfit].fun
 		self.loop.cphase_fit_success = fit[cfit].success
 
-		sfit = 'sPowell'
-		sa, sb, stau = fit[sfit].x[0], fit[sfit].x[1], fit[sfit].x[2]
+		sfit = 'sPowell' #gaussian chi squared
+		#sa, sb, stau = fit[sfit].x[0], fit[sfit].x[1], fit[sfit].x[2]
+		self.loop.sR, self.loop.stheta, stau  =sR, stheta, stau= fit[sfit].x[0], fit[sfit].x[1], fit[sfit].x[2]
 		self.loop.sQ = sQ = fit[sfit].x[3]	
 		self.loop.sQc = sQc = fit[sfit].x[4]	
 		self.loop.sQi = sQi = 1.0/ ((1./self.loop.sQ ) - (1./self.loop.sQc )) 
@@ -2340,7 +2561,9 @@ class sweep:
 		self.loop.schisquare = fit[sfit].fun
 		self.loop.sphase_fit_success = fit[sfit].success
 
-	
+		fit['sigma_squared_m'] = sigma_squared_m
+		fit['sigma_squared_p'] = sigma_squared_p
+		fit['sigma_squared'] = sigma_squared
 
 
 		if  Show_Plot:
@@ -2348,38 +2571,42 @@ class sweep:
 			fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
 			ax = fig.add_subplot(111,aspect='equal')
 
+			s21_concurrent_c = norm * cR * np.exp(np.complex(0.,ctheta)) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
+			# s21_concurrent_c = norm * np.exp(np.complex(0.,np.angle(np.complex(ca,cb)))) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
+			line = ax.plot(s21_concurrent_c.real,s21_concurrent_c.imag, markersize  = 4, linestyle = 'None',color = 'g', marker = 'o', markerfacecolor = 'g', markeredgecolor = 'g',  label = r'Concurrent Fit -  $\sigma_{V\theta}$')
 
-			s21_concurrent_c = norm * np.exp(np.complex(0.,np.angle(np.complex(ca,cb)))) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,-cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
-			line = ax.plot(s21_concurrent_c.real,s21_concurrent_c.imag,'go', label = r'Concurrent Fit -  $\sigma_{V\theta}$')
+			s21_concurrent_s = norm * sR * np.exp(np.complex(0.,stheta)) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
+			#s21_concurrent_s = norm * np.exp(np.complex(0.,np.angle(np.complex(sa,sb)))) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
+			line = ax.plot(s21_concurrent_s.real,s21_concurrent_s.imag,markersize  = 4, color = 'm',linestyle = 'None', marker = 'o', markerfacecolor = 'm', markeredgecolor = 'm',  label = r'Concurrent Fit -  $\sigma_{G}$')
+			line = ax.plot(s21_concurrent_s[0:Sample_Size:].real,s21_concurrent_s[0:Sample_Size:].imag,'m+', label = r'_Concurrent Fit -  $\sigma_{G}$')
 
-			s21_concurrent_s = norm * np.exp(np.complex(0.,np.angle(np.complex(sa,sb)))) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,-sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
-			line = ax.plot(s21_concurrent_s.real,s21_concurrent_s.imag,'mo', label = r'Concurrent Fit -  $\sigma_{G}$')
-
-
-			line = ax.plot(S21.real,S21.imag,'bo', label = r'Raw Data - $S_{21}$')
+			line = ax.plot(S21.real,S21.imag,markersize  = 4,color = 'b' ,marker = 'o',  linestyle = 'None',markerfacecolor = 'b', markeredgecolor = 'b', label = r'Raw Data - $S_{21}$')
 
 
-			
-			s21_stepwise  = norm * np.exp(np.complex(0.,np.angle(np.complex(a_0,b_0)))) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,-phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
-			line = ax.plot(s21_stepwise.real,s21_stepwise.imag,'ro', label = r'Stepwise Fit - $\hat{S}_{21}$')
+			s21_stepwise  = norm * R_0 * np.exp(np.complex(0.,theta_0)) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
+			#s21_stepwise  = norm * np.exp(np.complex(0.,np.angle(np.complex(a_0,b_0)))) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
+			line = ax.plot(s21_stepwise.real,s21_stepwise.imag,markersize  = 4, color = 'r', linestyle = 'None',marker = 'o', markerfacecolor = 'r', markeredgecolor = 'r', label = r'Stepwise Fit - $\hat{S}_{21}$')
 
 
 
 			ax.set_xlabel(r'$\Re[S_{21}(f)]$')
 			ax.set_ylabel(r'$\Im[S_{21}(f)]$')
 			ax.yaxis.labelpad = -2
-
-			ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
+			ax.legend(loc = 'upper center', fontsize=5, bbox_to_anchor=(0.5, -0.1), ncol=2,scatterpoints =1, numpoints = 1, labelspacing = .02)
+			#ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
+			
 			if Save_Fig == True:
-				fig.savefig('Loop_Run_{0}_Index_{1}'.format(self.metadata.Run, self.loop.index), dpi = 300, transparency  = True)
-
+				self._save_fig_dec(fig,'Concurrent_Fit_Index_{0}'.format(self.loop.index))
 			plt.show()
 
 		return fit
 
 
-	def _angle(self, z, deg = 0):
-		''' If z is a masked array. angle(z) returns the angle of the elements of z
+	def _angle(self, z, deg = 0, return_offset = False):
+		''' 
+		IF Z IS A VECTOR, THEN ANGLE IS SHIFTED WRT FIRST ELEMENT!!!!
+
+		If z is a masked array. angle(z) returns the angle of the elements of z
 		within the branch [0,360] instead of [-180, 180], which is the branch used
 		in np.angle(). The mask of angle(z) is set to be the mask of the input, z.
 
@@ -2389,8 +2616,10 @@ class sweep:
 		If z is a vector, then an angle shift is added to z  so the z[0] is 0 degrees
 		If z is a number, then dont shift angle'''
 		a = np.angle(z, deg = deg)
+		
 		try:
-			a = a - a[0] #if a is not a vector, then a[0] will throw an error
+			offset = a[0] #if a is not a vector, then a[0] will throw an error
+			a = a - offset  
 		except:
 			pass
 		p = np.where(a<=0,1,0)
@@ -2400,150 +2629,154 @@ class sweep:
 			a = ma.array(a + p*units,mask =z.mask) 
 		except:
 			a = a + p*units #if z is not a masked array do this
-		return a
-
-
-	def chi_square(self):
-		from scipy import interpolate
-		k = constants.value('Boltzmann constant') #unit is [J/k]
-		BW = self.metadata.IFBW #unit is [Hz]
-		#dBm2Vp = lambda dBm: 0.001*np.power(10,dBm/10) # convert dBm to Vp, peak voltage
-		g = lambda dB: np.power(10.0,dB/10.0)
-		RD = self.metadata.System_Calibration # contains Noise powers, gains and P1dB of readout devices
-		self.metadata.RTAmp = 'AML016P3411'
-		cal = self.metadata.Cable_Calibration['One_Way_40mK']
-		R = 50
-		j = np.complex(0,1)
-
-		Fit_Method = 'Multiple'
-		if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
-		   Fit_Method={Fit_Method}
-
-		if k is not None:
-			g_cable = lambda f: cal[0]*np.sqrt(f)+cal[1]*f+cal[2] #in dB -- attenuation detween device and digitizer
-			Tn_m_cable = lambda f: ((1./np.power(10,(cal[0]*np.sqrt(f)+cal[1]*f+cal[2])/10.)) -1)*290 #assuming room temperature cabling
-			Tn_p_cable = lambda f: ((1./np.power(10,(cal[0]*np.sqrt(f)+cal[1]*f+cal[2])/10.)) -1)*290
+		
+		if return_offset:
+			return a, offset
 		else:
-			g_cable = lambda f: 0. #in dB
-			Tn_m_cable = lambda f:0.
-			Tn_p_cable = lambda f:0.
-
-		if self.metadata.LNA['LNA'] is not None:
-			g_primary = interpolate.interp1d(RD[self.metadata.LNA['LNA']]['freq'], RD[self.metadata.LNA['LNA']]['g']) #in dB
-			Tn_m_primary = interpolate.interp1d(RD[self.metadata.LNA['LNA']]['freq'], RD[self.metadata.LNA['LNA']]['Tn_m'])
-			Tn_p_primary = interpolate.interp1d(RD[self.metadata.LNA['LNA']]['freq'], RD[self.metadata.LNA['LNA']]['Tn_p'])
-		else:
-			g_primary = lambda f:0
-			Tn_m_primary = lambda f:0
-			Tn_p_primary = lambda f:0
-
-		if self.metadata.RTAmp_In_Use == 1:
-			g_secondary = interpolate.interp1d(RD[self.metadata.RTAmp]['freq'], RD[self.metadata.RTAmp]['g']) #in dB
-			Tn_m_secondary = interpolate.interp1d(RD[self.metadata.RTAmp]['freq'], RD[self.metadata.RTAmp]['Tn_m'])
-			Tn_p_secondary = interpolate.interp1d(RD[self.metadata.RTAmp]['freq'], RD[self.metadata.RTAmp]['Tn_p'])
-		else:
-			g_secondary = lambda f:0.
-			Tn_m_secondary = lambda f:0.
-			Tn_p_secondary = lambda f:0.
-
-		if self.metadata.Digitizer is not None:
-			g_digitizer = interpolate.interp1d(RD[self.metadata.Digitizer]['freq'], RD[self.metadata.Digitizer]['g']) #in dB
-			Tn_m_digitizer = interpolate.interp1d(RD[self.metadata.Digitizer]['freq'], RD[self.metadata.Digitizer]['Tn_m'])
-			Tn_p_digitizer = interpolate.interp1d(RD[self.metadata.Digitizer]['freq'], RD[self.metadata.Digitizer]['Tn_p'])
-		else:
-			g_digitizer = lambda f:0.
-			Tn_m_digitizer = lambda f:0.
-			Tn_p_digitizer= lambda f:0.
+			return a
 
 
+	# def chi_square(self):
+	# 	from scipy import interpolate
+	# 	k = constants.value('Boltzmann constant') #unit is [J/k]
+	# 	BW = self.metadata.IFBW #unit is [Hz]
+	# 	#dBm2Vp = lambda dBm: 0.001*np.power(10,dBm/10) # convert dBm to Vp, peak voltage
+	# 	g = lambda dB: np.power(10.0,dB/10.0)
+	# 	RD = self.metadata.System_Calibration # contains Noise powers, gains and P1dB of readout devices
+	# 	self.metadata.RTAmp = 'AML016P3411'
+	# 	cal = self.metadata.Cable_Calibration['One_Way_40mK']
+	# 	R = 50
+	# 	j = np.complex(0,1)
+
+	# 	Fit_Method = 'Multiple'
+	# 	if isinstance(Fit_Method,str): #Allow for single string input for Fit_Method
+	# 	   Fit_Method={Fit_Method}
+
+	# 	if k is not None:
+	# 		g_cable = lambda f: cal[0]*np.sqrt(f)+cal[1]*f+cal[2] #in dB -- attenuation detween device and digitizer
+	# 		Tn_m_cable = lambda f: ((1./np.power(10,(cal[0]*np.sqrt(f)+cal[1]*f+cal[2])/10.)) -1)*290 #assuming room temperature cabling
+	# 		Tn_p_cable = lambda f: ((1./np.power(10,(cal[0]*np.sqrt(f)+cal[1]*f+cal[2])/10.)) -1)*290
+	# 	else:
+	# 		g_cable = lambda f: 0. #in dB
+	# 		Tn_m_cable = lambda f:0.
+	# 		Tn_p_cable = lambda f:0.
+
+	# 	if self.metadata.LNA['LNA'] is not None:
+	# 		g_primary = interpolate.interp1d(RD[self.metadata.LNA['LNA']]['freq'], RD[self.metadata.LNA['LNA']]['g']) #in dB
+	# 		Tn_m_primary = interpolate.interp1d(RD[self.metadata.LNA['LNA']]['freq'], RD[self.metadata.LNA['LNA']]['Tn_m'])
+	# 		Tn_p_primary = interpolate.interp1d(RD[self.metadata.LNA['LNA']]['freq'], RD[self.metadata.LNA['LNA']]['Tn_p'])
+	# 	else:
+	# 		g_primary = lambda f:0
+	# 		Tn_m_primary = lambda f:0
+	# 		Tn_p_primary = lambda f:0
+
+	# 	if self.metadata.RTAmp_In_Use == 1:
+	# 		g_secondary = interpolate.interp1d(RD[self.metadata.RTAmp]['freq'], RD[self.metadata.RTAmp]['g']) #in dB
+	# 		Tn_m_secondary = interpolate.interp1d(RD[self.metadata.RTAmp]['freq'], RD[self.metadata.RTAmp]['Tn_m'])
+	# 		Tn_p_secondary = interpolate.interp1d(RD[self.metadata.RTAmp]['freq'], RD[self.metadata.RTAmp]['Tn_p'])
+	# 	else:
+	# 		g_secondary = lambda f:0.
+	# 		Tn_m_secondary = lambda f:0.
+	# 		Tn_p_secondary = lambda f:0.
+
+	# 	if self.metadata.Digitizer is not None:
+	# 		g_digitizer = interpolate.interp1d(RD[self.metadata.Digitizer]['freq'], RD[self.metadata.Digitizer]['g']) #in dB
+	# 		Tn_m_digitizer = interpolate.interp1d(RD[self.metadata.Digitizer]['freq'], RD[self.metadata.Digitizer]['Tn_m'])
+	# 		Tn_p_digitizer = interpolate.interp1d(RD[self.metadata.Digitizer]['freq'], RD[self.metadata.Digitizer]['Tn_p'])
+	# 	else:
+	# 		g_digitizer = lambda f:0.
+	# 		Tn_m_digitizer = lambda f:0.
+	# 		Tn_p_digitizer= lambda f:0.
 
 
 
-		var = 0 # The variance
-		Teq_m = lambda f: Tn_m_primary(f) + Tn_m_secondary(f)/g(g_primary(f)) + Tn_m_cable(f)/g(g_secondary(f)+g_primary(f)) + Tn_m_digitizer(f)/g(g_secondary(f)+g_primary(f)+g_cable(f))
 
-		Teq_p = lambda f: Tn_p_primary(f) + Tn_p_secondary(f)/g(g_primary(f)) + Tn_p_cable(f)/g(g_secondary(f)+g_primary(f)) + Tn_p_digitizer(f)/g(g_secondary(f)+g_primary(f)+g_cable(f))
-		geq = lambda f: g(g_secondary(f)+g_primary(f)+g_cable(f)+ g_digitizer(f))
-		sigma_squared =  lambda f: 4*k*R*geq(f)*self.metadata.IFBW*(np.complex(1,0) * Teq_m(f) + np.complex(0,1) * Teq_p(f))
-		sigma_squared = np.vectorize(sigma_squared)
 
-		F = self.Sweep_Array[self.loop.index]['Frequencies']
+	# 	var = 0 # The variance
+	# 	Teq_m = lambda f: Tn_m_primary(f) + Tn_m_secondary(f)/g(g_primary(f)) + Tn_m_cable(f)/g(g_secondary(f)+g_primary(f)) + Tn_m_digitizer(f)/g(g_secondary(f)+g_primary(f)+g_cable(f))
 
-		S21 = self.Sweep_Array[self.loop.index]['S21']
+	# 	Teq_p = lambda f: Tn_p_primary(f) + Tn_p_secondary(f)/g(g_primary(f)) + Tn_p_cable(f)/g(g_secondary(f)+g_primary(f)) + Tn_p_digitizer(f)/g(g_secondary(f)+g_primary(f)+g_cable(f))
+	# 	geq = lambda f: g(g_secondary(f)+g_primary(f)+g_cable(f)+ g_digitizer(f))
+	# 	sigma_squared =  lambda f: 4*k*R*geq(f)*self.metadata.IFBW*(np.complex(1,0) * Teq_m(f) + np.complex(0,1) * Teq_p(f))
+	# 	sigma_squared = np.vectorize(sigma_squared)
+
+	# 	F = self.Sweep_Array[self.loop.index]['Frequencies']
+
+	# 	S21 = self.Sweep_Array[self.loop.index]['S21']
 		
 
-		zc = np.complex(self.loop.a,self.loop.b)
-		tau = self.metadata.Electrical_Delay
-		Q = self.loop.Q 
-		Qc = self.loop.Qc 
-		#Qi = self.loop.Qi 
-		fr = self.loop.fr 
-		phi = (self.loop.phi * np.pi/180) + 0*np.pi
-		s21_fit  = lambda f: self.loop.normalization * np.exp(np.complex(0.,angle(zc))) * np.exp(np.complex(0,-2*np.pi*f*tau)) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / np.complex(1, 2*Q*(f-fr)/fr))
+	# 	zc = np.complex(self.loop.a,self.loop.b)
+	# 	tau = self.metadata.Electrical_Delay
+	# 	Q = self.loop.Q 
+	# 	Qc = self.loop.Qc 
+	# 	#Qi = self.loop.Qi 
+	# 	fr = self.loop.fr 
+	# 	phi = self.loop.phi#(self.loop.phi * np.pi/180) + 0*np.pi
+	# 	s21_fit  = lambda f: self.loop.normalization * np.exp(np.complex(0.,angle(zc))) * np.exp(np.complex(0,-2*np.pi*f*tau)) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / np.complex(1, 2*Q*(f-fr)/fr))
 		
 
 
-		def obj(x,S21, sigma_squared ,freq):
-			zc,tau,Q, Qc, fr, phi= x
-			s21_fit  = lambda f: self.loop.normalization * np.exp(np.complex(0.,angle(zc))) * np.exp(np.complex(0,-2*np.pi*f*tau)) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / np.complex(1, 2*Q*(f-fr)/fr))
-			s21_fit = np.vectorize(s21_fit)
-			diff = S21- s21_fit(freq)
-			sigma2 = sigma_squared(freq)
-			frac = (np.square(diff.real)/sigma2.real) + (np.square(diff.imag)/sigma2.imag) 
-			N = freq.shape[0]*1.0
-			return  frac.sum()/N
+	# 	def obj(x,S21, sigma_squared ,freq):
+	# 		zc,tau,Q, Qc, fr, phi= x
+	# 		s21_fit  = lambda f: self.loop.normalization * np.exp(np.complex(0.,angle(zc))) * np.exp(np.complex(0,-2*np.pi*f*tau)) * (1 - (Q/Qc)*np.exp(np.complex(0,-phi)) / np.complex(1, 2*Q*(f-fr)/fr))
+	# 		s21_fit = np.vectorize(s21_fit)
+	# 		diff = S21- s21_fit(freq)
+	# 		sigma2 = sigma_squared(freq)
+	# 		frac = (np.square(diff.real)/sigma2.real) + (np.square(diff.imag)/sigma2.imag) 
+	# 		N = freq.shape[0]*1.0
+	# 		return  frac.sum()/N
 
-		#p0 is the initial guess
-		p0 = np.array([zc,tau,Q, Qc, fr, phi])
+	# 	#p0 is the initial guess
+	# 	p0 = np.array([zc,tau,Q, Qc, fr, phi])
 		
-		#Each fit method is saved as a lambda function in a dictionary called fit_func
-		fit_func = {}
-		fit_func['Powell'] = lambda : minimize(obj, p0, args=(S21,sigma_squared ,F), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
-		#fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(S21,sigma_squared ,F), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
-		#fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
+	# 	#Each fit method is saved as a lambda function in a dictionary called fit_func
+	# 	fit_func = {}
+	# 	fit_func['Powell'] = lambda : minimize(obj, p0, args=(S21,sigma_squared ,F), method='Powell', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False})
+	# 	#fit_func['Nelder-Mead']  = lambda : minimize(obj, p0, args=(S21,sigma_squared ,F), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-15, callback=None, options={'disp':False, 'xtol' : 1e-6,'maxfev':1000})
+	# 	#fit_func['Newton-CG'] = lambda : minimize(obj, p0, args=(z_theta_c,f_c), method='Newton-CG', jac=jac, hess=hess, hessp=None, bounds=None, constraints=(),tol=1e-15, callback=None, options={'maxiter' : 50,'xtol': 1e-4,'disp':False})
 
-		fit = {}
-		if isinstance(Fit_Method,set):      #All string inputs for Fit_Method were changed to sets at the begining of phase_fit
-		   if Fit_Method == {'Multiple'}:
-		      for method in fit_func.keys():
-		         fit[method] = fit_func[method]() # Execute the fit lambda function
-		   else:
-		      for method in Fit_Method:
-		         if method not in fit_func.keys():
-		            print("Unrecognized fit method. Aborting fit. \n\t Must choose one of {0} or 'Multiple'".format(fit_func.keys()))
-		            return
-		         else:   
-		            fit[method] = fit_func[method]()
-		else:
-		   print("Unrecognized fit method data type. Aborting fit. \n\t Please specify using a string or a set of strings from one of {0} or 'Multiple'".format(fit_func.keys()))
-		   return	         	   
+	# 	fit = {}
+	# 	if isinstance(Fit_Method,set):      #All string inputs for Fit_Method were changed to sets at the begining of phase_fit
+	# 	   if Fit_Method == {'Multiple'}:
+	# 	      for method in fit_func.keys():
+	# 	         fit[method] = fit_func[method]() # Execute the fit lambda function
+	# 	   else:
+	# 	      for method in Fit_Method:
+	# 	         if method not in fit_func.keys():
+	# 	            print("Unrecognized fit method. Aborting fit. \n\t Must choose one of {0} or 'Multiple'".format(fit_func.keys()))
+	# 	            return
+	# 	         else:   
+	# 	            fit[method] = fit_func[method]()
+	# 	else:
+	# 	   print("Unrecognized fit method data type. Aborting fit. \n\t Please specify using a string or a set of strings from one of {0} or 'Multiple'".format(fit_func.keys()))
+	# 	   return	         	   
 		               				
-		for method in fit.keys():
-			print('\n{0} Minimzation Result:\n{1}\n'.format(method,fit[method]))
-		#Does not work if the objective function is re-arranged as in the following
-		# print('Nelder-Mead 2 ################# ')
-		# def obj(x,z_theta,f):
-		# 	theta,fr,Q = x
-		# 	return np.square(np.tan((z_theta - theta)/2) - (2.0*Q*(1-f/fr))).sum()
-		# res = minimize(obj, p0, args=(z_theta,f), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-20, callback=None, options={'disp':True})
-		# print(res)
+	# 	for method in fit.keys():
+	# 		print('\n{0} Minimzation Result:\n{1}\n'.format(method,fit[method]))
+	# 	#Does not work if the objective function is re-arranged as in the following
+	# 	# print('Nelder-Mead 2 ################# ')
+	# 	# def obj(x,z_theta,f):
+	# 	# 	theta,fr,Q = x
+	# 	# 	return np.square(np.tan((z_theta - theta)/2) - (2.0*Q*(1-f/fr))).sum()
+	# 	# res = minimize(obj, p0, args=(z_theta,f), method='Nelder-Mead', jac=None, hess=None, hessp=None, bounds=None, constraints=(), tol=1e-20, callback=None, options={'disp':True})
+	# 	# print(res)
 	
-		# Least square method does not find a good Q fit and the sum of the squares for solution is fairly high
-		# print('Least Square ################# ')
-		# print(fit['Least-Squares'])
-		# print(np.square(fit['Least-Squares'][2]['fvec']).sum()) # this is the value of the sum of the squares for the solution
-		# x = fit['Least-Squares'][0] 
+	# 	# Least square method does not find a good Q fit and the sum of the squares for solution is fairly high
+	# 	# print('Least Square ################# ')
+	# 	# print(fit['Least-Squares'])
+	# 	# print(np.square(fit['Least-Squares'][2]['fvec']).sum()) # this is the value of the sum of the squares for the solution
+	# 	# x = fit['Least-Squares'][0] 
 		
-		#x = res.x 
-		bestfit = list(fit)[0]
-		lowest = fit[bestfit].fun
-		for key in fit.keys(): 
-			if fit[key].fun < lowest:
-				lowest = fit[key].fun
-				bestfit = key
+	# 	#x = res.x 
+	# 	bestfit = list(fit)[0]
+	# 	lowest = fit[bestfit].fun
+	# 	for key in fit.keys(): 
+	# 		if fit[key].fun < lowest:
+	# 			lowest = fit[key].fun
+	# 			bestfit = key
 
-		return s21_fit, Teq_m, Teq_p,geq, fit[bestfit].x
-		#self.Sweep_Array[index]['S21']
+	# 	return s21_fit, Teq_m, Teq_p,geq, fit[bestfit].x
+	# 	#self.Sweep_Array[index]['S21']
 
 	def fit_system_calibration(self):
 		'''compute chebyshev polynomial fits for  gain and noise values.
@@ -2674,6 +2907,7 @@ class sweep:
 		##### Zfl, Zres - used in minimization, Zfl converts power to voltage			
 		Q   = self.Sweep_Array['Q'][P_min_index]
 		Qc  = self.Sweep_Array['Qc'][P_min_index]
+
 		Qtl = np.power( (1./Q) - (1./Qc) , -1.)
 		fr = self.Sweep_Array['Fr'][P_min_index]
 		Zfl = self.metadata.Feedline_Impedance
@@ -2695,7 +2929,12 @@ class sweep:
 			# Remove Gain Compression
 			self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
 			# Normalize Loop
-			s21_mag = self.normalize_loop()
+			norm = self.Sweep_Array['R'][index]
+			if (norm <= 0) or (norm == None):
+				print('Outer loop radius non valid. Using using 1')
+				norm  = 1
+			self.loop.z = self.loop.z/norm
+			#s21_mag = self.normalize_loop()
 			# Remove Cable Delay
 			self.remove_cable_delay(Show_Plot = False, Verbose = False)	
 			# Fit loop to circle
@@ -2707,7 +2946,7 @@ class sweep:
 			f = ma.array(self.loop.freq,mask = mask)
 			z = ma.array(self.loop.z,mask = mask)
 			zc = np.complex(self.loop.a,self.loop.b)
-			z = z*np.exp(np.complex(0,-np.angle(zc)))
+			z = z*np.exp(np.complex(0,-np.angle(zc))) #rotate to real axis, but dont translate to origin 
 
 			if self.Sweep_Array['Is_Valid'][index] == True: 
 				power_sweep_list.append((V1,z.compressed(),f.compressed()))
@@ -2835,7 +3074,7 @@ class sweep:
 				V1exp, S21exp, f = sweep
 				Pexp = 10*np.log10(V1exp*V1exp/(2 *Zfl*0.001))
 				dff = (f - fr)/fr
-				curve = ax[1].plot(dff,20*np.log10(np.abs(S21exp)),label = '{:3.2f} dBm'.format(Pexp)) # Pexp is Preadout
+				curve = ax[1].plot(dff,20*np.log10(np.abs(S21exp)), label = '$P_{probe}$ =' + ' {:3.2f} dBm'.format(Pexp)) # Pexp is Preadout
 				curve = ax[2].plot(S21exp.real,S21exp.imag)
 
 					
@@ -2882,12 +3121,16 @@ class sweep:
 			ax[1].set_xlabel(r'$\delta f_0 / f_0$', color='k')
 			ax[1].set_ylabel(r'$20 \cdot \log_{10}|S_{21}|$ [dB]', color='k') 
 			ax[1].yaxis.labelpad = 0 #-6
+			ax[1].xaxis.labelpad = -4
 			ax[1].ticklabel_format(axis='x', style='sci',scilimits = (0,0), useOffset=True)
 			ax[1].text(0.01, 0.01, note,
 				verticalalignment='bottom', horizontalalignment='left',
 				transform=ax[1].transAxes,
 				color='black', fontsize=4)
-			ax[1].legend(loc = 'right', fontsize=4,scatterpoints =1, numpoints = 1, labelspacing = .1)
+			ax[1].legend(loc = 'upper center', fontsize=5, bbox_to_anchor=(.5, -1.5),  ncol=4,scatterpoints =1, numpoints = 1, labelspacing = .02)
+			#bbox_to_anchor=(1.25, -0.1),bbox_transform = ax[2].transAxes, 
+
+
 
 			ax[2].set_title('Resonance Loop')
 			ax[2].set_xlabel(r'$\Re$[$S_{21}$]', color='k')
@@ -2899,6 +3142,8 @@ class sweep:
 			ax[3].set_xlabel(r'$\delta f_0 / f_0$', color='k')
 			ax[3].ticklabel_format(axis='x', style='sci',scilimits = (0,0),useOffset=False)
 
+			mpl.rcParams['axes.labelsize'] = 'small' # [size in points | 'xx-small' | 'x-small' | 'small' | 'medium....
+
 			for k in ax.keys():
 				ax[k].tick_params(axis='y', labelsize=6)
 				ax[k].tick_params(axis='x', labelsize=6)
@@ -2906,9 +3151,7 @@ class sweep:
 			plt.subplots_adjust(left=.1, bottom=.1, right=None ,wspace=.35, hspace=.3)
 			
 			if Save_Fig == True:
-				file_name = 'Nonlinear_Fit_' + self.metadata.Run + '_Start_Index_' + str(Sweep_Array_Record_Index)
-				fig.savefig(file_name,dpi=300, transparency  = True)
-			
+				self._save_fig_dec(fig, 'Nonlinear_Fit_Start_Index_' + str(Sweep_Array_Record_Index))
 			plt.subplots_adjust(top =0.90)
 			plt.suptitle('Fit to Nonlinear Resonator Data', fontweight='bold')
 			plt.show()
@@ -2949,9 +3192,9 @@ class sweep:
 
 		return k
 
-	def generate_nonlinear_data(self,  Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None, Like = None,
+	def generate_nonlinear_data(self,  Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None, Like = None, Save_Fig = False,
 		curve_parameter_dict = {'f_0':700e6, 'Qtl':300e3, 'Qc':80e3, 'eta':1e-1, 'delta':1e-6, 'Zfl':30, 'Zres':50, 'phi31': np.pi/2.03, 'phiV1':np.pi/10, 'V30V30':0.01},
-		sweep_parameter_dict = {'Run': 'F1', 'Pprobe_dBm_Start' :-65.0,'Pprobe_dBm_Stop': -25.0, 'Pprobe_Num_Points':10, 'numBW':24,'num': 1000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'}):
+		sweep_parameter_dict = {'Run': 'F1', 'Pprobe_dBm_Start' :-65.0,'Pprobe_dBm_Stop': -25.0, 'Pprobe_Num_Points':10, 'numBW':40,'num': 2000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'}):
 		'''Creates and Loads Nonlinear Data
 		eta -- Q nonlinearity
 		delta --  freq nonlinearity	
@@ -2986,7 +3229,6 @@ class sweep:
 		if Like is not None: #would be better to confrim that Like is an instance of KAM.sweep
 				self.metadata.__dict__.update(Like.metadata.__dict__)
 			
-		
 		self.metadata.Electrical_Delay = 0
 		self.metadata.Time_Created =   '05/01/2015 12:00:00' # or the current datetime datetime.datetime.now().strftime('%m/%d/%Y %H:%M:%S')
 		self.metadata.Run = sd['Run']
@@ -2999,13 +3241,13 @@ class sweep:
 		############################# Cable Calbration
 		k = self.metadata.Cable_Calibration[Cable_Calibration_Key]
 		Preadout = lambda f: k[0]*np.sqrt(f)+k[1]*f+k[2] - self.metadata.Atten_NA_Output - self.metadata.Atten_At_4K
-		
-		############################## Make Pprobe Array
+
+		############################## Make Pprobe Array - This is power at the device.
 		Pprobe_dBm = np.linspace(sd['Pprobe_dBm_Start'],sd['Pprobe_dBm_Stop'], sd['Pprobe_Num_Points'])
 		Pprobe = 0.001* np.power(10.0,Pprobe_dBm/10.0)
 		V1V1 = Pprobe *2*cd['Zfl']
 		V1 = np.sqrt(V1V1) * np.exp(np.complex(0,1)*cd['phiV1'])
-
+		# NOTE : V1 has a phase. Its a complex number
 
 		################################# Create f array making sure it contains f_0
 		BW = sd['numBW']*cd['f_0']/Q 
@@ -3034,10 +3276,26 @@ class sweep:
 
 		V3V3_direction = np.empty(f.shape)
 		S21_direction = np.empty_like(f,dtype = np.complex128)
+
+		#################### Construct gain array
+		if Like is not None: #would be better to confrim that Like is an instance of KAM.sweep
+			g_s , Tn_m_s ,Tn_p_s = self._construct_readout_chain(f) # get the gain chain
+			g = np.prod(g_s, axis = 0) # results in a numpy array  that is the same length as f...  a again for each frequency
+		else:
+			g = np.ones_like(f)
+		# g_i is the total gain between the device and readout digitizer (Network Analyzer) at the frequency f_i
+
 		
+		#################### Find index of f_0
+		try:
+			f_0_index = np.where(f == curve_parameter_dict['f_0'])[0][0]
+		except:
+			d2 = np.square(f - curve_parameter_dict['f_0'])
+			f_0_index = np.argmin(d2)
 
 
-		#################### Initialize and Consigure self.Sweep_Array
+
+		#################### Initialize and Configure self.Sweep_Array
 		tpoints = 0
 		self._define_sweep_data_columns(f.size,tpoints)
 		self.Sweep_Array = np.zeros(Pprobe_dBm.size, dtype = self.sweep_data_columns) #Sweep_Array holdes all sweep data. Its length is the number of sweeps
@@ -3063,8 +3321,8 @@ class sweep:
 		for index in xrange(Pprobe_dBm.size):
 			sys.stdout.write('\r {0} of {1} '.format(index+1, Pprobe_dBm.size))
 			sys.stdout.flush()
-			Phase_Noise = np.zeros_like(f.shape) if Phase_Noise_Variance is None else np.random.normal(scale = np.sqrt(Phase_Noise_Variance), size=f.shape)
-			Amplitude_Noise = np.zeros_like(f.shape) if Amplitude_Noise_Variance is None else np.random.normal(scale = np.sqrt(Amplitude_Noise_Variance), size=f.shape)
+			Phase_Noise = np.zeros_like(f) if Phase_Noise_Variance is None else np.random.normal(scale = np.sqrt(Phase_Noise_Variance), size=f.shape)
+			Amplitude_Noise = np.zeros_like(f) if Amplitude_Noise_Variance is None else np.random.normal(scale = np.sqrt(Amplitude_Noise_Variance), size=f.shape)
 
 			for n in xrange(f.shape[0]):
 				#################### Solve for Resonator amplitude using formulae from 
@@ -3078,27 +3336,30 @@ class sweep:
 
 			S21 = S21_direction + Amplitude_Noise + np.complex(0,1)*Phase_Noise
 			
+			Pin_dB = Pprobe_dBm[index] - Preadout(cd['f_0'])
+
 			####################  Fill self.Sweep_Array
 			self._define_sweep_array(index, Fstart = f[0], #Hz
 										Fstop = f[-1], #Hz
-										S21 = S21,
+										S21 = S21*np.sqrt(g), # g is power gain. so sqrt(g) is voltage gain
 										Frequencies = f, #Hz
 										Preadout_dB = Pprobe_dBm[index],
-										Pinput_dB = Pprobe_dBm[index] - Preadout(cd['f_0']),
+										Pinput_dB = Pin_dB,
 										Is_Valid = True,
 										Mask = np.zeros(f.shape, dtype=np.bool),
 										Chi_Squared = 0,
 										Fr = cd['f_0'], #Note! we are using the resonance freq of the lowest power S21 for all 
 										Q = Q,
 										Qc = cd['Qc'],
-										Heater_Voltage = 0.0
+										Heater_Voltage = 0.0,
+										R = np.sqrt(g[f_0_index]) # remember,  V1 is the readout probe amplitude
 										)
 
-			curve = ax[1].plot(dff,20*np.log10(np.abs(S21)), linestyle = '-', label = '{0:.2f} dBm'.format(Pprobe_dBm[index]))
+			curve = ax[1].plot(dff,20*np.log10(np.abs(S21)), linestyle = '-', label = '$P_{probe}$ = ' + '{0:.2f} dBm'.format(Pprobe_dBm[index]))
 			
 
 		################ Configure Plot
-		ax[1].set_title('Mag Transmission')
+		
 		ax[1].set_xlabel(r'$\delta f_0 / f_0$', color='k')
 		ax[1].set_ylabel(r'Mag[$S_{21}$]', color='k')
 		ax[1].yaxis.labelpad = -4
@@ -3107,9 +3368,18 @@ class sweep:
 		for k in ax.keys():
 			ax[k].tick_params(axis='y', labelsize=9)
 			ax[k].tick_params(axis='x', labelsize=5)
+		
+		
 
-
+		if Save_Fig:
+			
+			if Like is not  None:
+				like = '_Like_' + Like.metadata.Run 
+			else:
+				like = ''
+			self._save_fig_dec(fig,'Mock_Data' + like)
 		#plt.subplots_adjust(left=.1, bottom=.1, right=None, top=.95 ,wspace=.4, hspace=.4)
+		ax[1].set_title('Mag Transmission')
 		plt.suptitle('Nonlinear Resonator Plots')
 		plt.show()
 
@@ -3118,21 +3388,12 @@ class sweep:
 
 		return fig, ax
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+	def _save_fig_dec(self, fig, name):
+			os.chdir(Plots_Dir)
+			if self.metadata.Run is not None:
+				name = self.metadata.Run+ '_'+ name  
+			fig.savefig(name, dpi=300, transparency  = True, bbox_inches='tight')#Title.replace('\n','_').replace(' ','_')+date
+			os.chdir(Working_Dir)
 
 
 
