@@ -108,4 +108,12 @@ if Ver == 2: #temperature sweeps
 
 	TP_Sweeps = [Run51aTP,Run51bTP,Run48bTP,Run49aTP,Run48aTP,Run46aTP,Run45aTP,Run44bTP,Run44aTP,Run52bTP2ndh,Run52bTP2ndl,Run52bTP1st]
 
+if Ver == 2: #simulations
+	S3 = KAM.sweep(); S3.load_hf5('/RunS3_Sim/T201506151322', filename = database_location);
+	S4 = KAM.sweep(); S4.load_hf5('/RunS4_Sim/T201507191646', filename = database_location);
+	S5 = KAM.sweep(); S5.load_hf5('/RunS5_Sim/T201507162043', filename = database_location);
+	S6 = KAM.sweep(); S6.load_hf5('/RunS6_Sim/T201507162150', filename = database_location);
+	S7 = KAM.sweep(); S7.load_hf5('/RunS7_Sim/T201507171220', filename = database_location);
+	S8 = KAM.sweep(); S8.load_hf5('/RunS8_Sim/T201506251213', filename = database_location);
 
+	Sims = [S3,S4,S5,S6,S7,S8]

@@ -12,19 +12,19 @@ path = '/Users/miguel_daal/Desktop/Some_Data/'
 
 Find_Temperatures = 0
 Cable_Calibration = 1
-Run52b = 0
-Run51a = 0
-Run51b = 0
-Run49a = 0
-Run48a = 0
-Run48b = 0
-Run47a = 0
-Run46a = 0
-Run45b = 0
-Run45a = 0
-Run44b = 0
-Run44a = 0
-Save_Sonnet_Sims = 0
+Run52b = 1
+Run51a = 1
+Run51b = 1
+Run49a = 1
+Run48a = 1
+Run48b = 1
+Run47a = 1
+Run46a = 1
+Run45b = 1
+Run45a = 1
+Run44b = 1
+Run44a = 1
+Save_Sonnet_Sims = 1
 Mock_Data = 1
 
 #############
@@ -73,8 +73,8 @@ System_Calibration['AML016P3411'] = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= 
 
 F = [3000000., 3000000000]
 G = [1.,1]
-Nm = [1596471649,1596471649] #(1.15e-4)**2/(4*k*50*3000)#rms Peak Voltage Noise
-Np =  [1796739812,1796739812]# (1.22e-4)**2/(4*k*50*3000)
+Nm = [1448594313,1448594313] ### np.square(2e-6)/(4*k*50)   <--  is Tn (Hz)^2, must devide by BW^2 to get Tn
+Np =  [1752799118,1752799118]### np.square(2.2e-6)/(4*k*50)
 P1dB = +20. # Fault power level. 
 System_Calibration['NA']  = dict(freq =F,g= G,Tn_m = Nm,Tn_p = Np,P1dB= P1dB)
 
@@ -761,32 +761,65 @@ if Save_Sonnet_Sims:
 
 	filename = path + 'Resonator_Simulations/S3.s2p'
 	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False)
+	swp.metadata.Resonator_Width = 2.**3 * 1e-6
 	swp.metadata.Run = 'S3_Sim'
 	swp.save_hf5(overwrite = True)
 
 	filename = path + 'Resonator_Simulations/S4.s2p'
 	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False) 
+	swp.metadata.Resonator_Width = 2.**4 * 1e-6
 	swp.metadata.Run = 'S4_Sim'
 	swp.save_hf5(overwrite = True)
 
 	filename = path + 'Resonator_Simulations/S5.s2p'
 	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False) 
+	swp.metadata.Resonator_Width = 2.**5 * 1e-6
 	swp.metadata.Run = 'S5_Sim'
 	swp.save_hf5(overwrite = True)
 
 	filename = path + 'Resonator_Simulations/S6.s2p'
 	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False) 
+	swp.metadata.Resonator_Width = 2.**6 * 1e-6
 	swp.metadata.Run = 'S6_Sim'
 	swp.save_hf5(overwrite = True)
 
 	filename = path + 'Resonator_Simulations/S7.s2p'
 	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False) 
+	swp.metadata.Resonator_Width = 2.**7 * 1e-6
 	swp.metadata.Run = 'S7_Sim'
 	swp.save_hf5(overwrite = True)
 
 	filename = path + 'Resonator_Simulations/S8.s2p'
 	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False) 
+	swp.metadata.Resonator_Width = 2.**8 * 1e-6
 	swp.metadata.Run = 'S8_Sim'
+	swp.pick_loop(0)
+	swp.trim_loop(N =2)
+	swp.circle_fit(Show_Plot = False)
+	swp.phase_fit(Fit_Method = 'Multiple',Verbose = False, Show_Plot = False)
+	swp._define_sweep_array(0 , Q = swp.loop.Q,
+								Qc = swp.loop.Qc,
+								Fr = swp.loop.fr,
+								#Mask = swp.loop.phase_fit_mask,
+								Chi_Squared = swp.loop.chisquare,
+								R = swp.loop.R,
+								r = swp.loop.r,
+								a = swp.loop.a,
+								b = swp.loop.b,
+								Theta = swp.loop.theta,
+								Phi = swp.loop.phi)
 	swp.save_hf5(overwrite = True)
 
 if Mock_Data:

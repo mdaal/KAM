@@ -1064,7 +1064,7 @@ if 0:
 		Run45aP_Mock.complete_fit( Use_Mask = True, Verbose = False , Show_Plot = True, Save_Fig = True)
 
 
-if 1: #test code for generating resonance loops
+if 0: #test code for generating resonance loops
 	import KAM
 	reload(KAM)	
 	sweep  = KAM.sweep();
