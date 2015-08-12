@@ -12,19 +12,19 @@ path = '/Users/miguel_daal/Desktop/Some_Data/'
 
 Find_Temperatures = 0
 Cable_Calibration = 1
-Run52b = 1
-Run51a = 1
-Run51b = 1
-Run49a = 1
-Run48a = 1
-Run48b = 1
-Run47a = 1
-Run46a = 1
-Run45b = 1
-Run45a = 1
-Run44b = 1
-Run44a = 1
-Save_Sonnet_Sims = 1
+Run52b = 0
+Run51a = 0
+Run51b = 0
+Run49a = 0
+Run48a = 0
+Run48b = 0
+Run47a = 0
+Run46a = 0
+Run45b = 0
+Run45a = 0
+Run44b = 0
+Run44a = 0
+Save_Sonnet_Sims = 0
 Mock_Data = 1
 
 #############
@@ -825,8 +825,10 @@ if Save_Sonnet_Sims:
 if Mock_Data:
 	import KAM
 	reload(KAM)	
+	database_location = 'Data/My_Data_Library.h5'
 	Run45aP     = KAM.sweep(); Run45aP.load_hf5('/Run45a/T201402061732', filename = database_location);
-	
+	Run48aP     = KAM.sweep(); Run48aP.load_hf5('/Run48a/T201403311119', filename = database_location);
+
 	def Gen_Mock_Data_Sweep(Sweep, Indexing = (None,None,None)):
 		index = 0 
 		Sweep.pick_loop(index)
@@ -853,14 +855,15 @@ if Mock_Data:
 		sweep  = KAM.sweep();
 		sweep.generate_nonlinear_data(Show_Plot = True, Phase_Noise_Variance = None, Amplitude_Noise_Variance = None, Like = Sweep, Save_Fig = True,
 		curve_parameter_dict = {'f_0':f0, 'Qtl':Qi, 'Qc':Qc, 'eta':eta, 'delta':delta, 'Zfl':Zfl, 'Zres':Zres, 'phi31': phi31, 'phiV1':0, 'V30V30':V30V30 },
-		sweep_parameter_dict = {'Run': 'Mock_' + Sweep.metadata.Run, 'Pprobe_dBm_Start' :-100.0,'Pprobe_dBm_Stop': -54.0, 'Pprobe_Num_Points':17, 'numBW':40,'num': 2000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'})
+		sweep_parameter_dict = {'Run': 'Mock_' + Sweep.metadata.Run, 'Pprobe_dBm_Start' :-100.0,'Pprobe_dBm_Stop': -64.0, 'Pprobe_Num_Points':17, 'numBW':40,'num': 2000, 'Up_or_Down': 'Up', 'Freq_Spacing':'Linear'})
 
 		sweep.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))
 		sweep.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False,Complete_Fit = True )
 		sweep.save_hf5(overwrite = True)
 		return sweep 
-	sweep = 	Gen_Mock_Data_Sweep(Run45aP, Indexing = (None,-1,None))#(None,-1,None)
+	#sweep = 	Gen_Mock_Data_Sweep(Run45aP, Indexing = (None,-1,None))#(None,-1,None) *********'Pprobe_dBm_Stop': -54.0,
 
+	sweep = 	Gen_Mock_Data_Sweep(Run48aP, Indexing = (None,-18,2))
 
 finished = time.time()
 elapsed = (finished - start )/60.0 #minutes

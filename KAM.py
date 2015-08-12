@@ -2366,6 +2366,11 @@ class sweep:
 		# CC = self.metadata.Cable_Calibration # cable loss fit coefficients
 		R = 50 #system impedance
 
+		#
+		#
+		# Implement Gain decompression on S21!
+		#
+		#
 		if Use_Mask:
 			F = ma.array(self.Sweep_Array[self.loop.index]['Frequencies'],mask = self.Sweep_Array[self.loop.index]['Mask'])
 			F = F.compressed()
@@ -2408,7 +2413,7 @@ class sweep:
 			Qc_0     = self.Sweep_Array[self.loop.index]['Qc']
 			fr_0     = self.Sweep_Array[self.loop.index]['Fr'] 
 			phi_0    = self.Sweep_Array[self.loop.index]['Phi']#(self.Sweep_Array[self.loop.index]['Phi'] * np.pi/180) + 0*np.pi
-			norm     = 1#self.Sweep_Array[self.loop.index]['Normalization'] 
+			
 		else:
 			#a_0,b_0  = self.loop.a, self.loop.b
 			R_0      = self.loop.R
@@ -2418,7 +2423,7 @@ class sweep:
 			Qc_0     = self.loop.Qc 
 			fr_0     = self.loop.fr 
 			phi_0    = self.loop.phi# (self.loop.phi * np.pi/180) + 0*np.pi
-			norm     = 1#self.loop.normalization
+			
 
 
 
@@ -2430,7 +2435,7 @@ class sweep:
 			# a,b,tau,Q, Qc, fr, phi= x
 			# s21_fit  = norm * np.exp(np.complex(0.,np.angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
 			R,theta,tau,Q, Qc, fr, phi= x
-			s21_fit  = norm * R* np.exp(np.complex(0.,theta)) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+			s21_fit  =  R * np.exp(np.complex(0.,theta)) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
 	
 			
 
@@ -2456,7 +2461,7 @@ class sweep:
 			# a,b,tau,Q, Qc, fr, phi= x
 			# s21_fit  = norm * np.exp(np.complex(0.,np.angle(np.complex(a,b)))) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
 			R,theta,tau,Q, Qc, fr, phi= x
-			s21_fit  = norm * R* np.exp(np.complex(0.,theta)) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
+			s21_fit  =  R * np.exp(np.complex(0.,theta)) * np.exp(np.complex(0,-2*np.pi*tau)*freq) * (1 - (Q/Qc)*np.exp(np.complex(0,phi)) / (1 + np.complex(0,2*Q)*(freq-fr)/fr ) )
 
 
 			# diff = s21 - s21_fit
@@ -2531,40 +2536,47 @@ class sweep:
 		fit['sigma_squared'] = sigma_squared
 
 
-		if  Show_Plot:
+		
+		ax_dict = {}
+		fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
+		fig_dict = {fig : ax_dict}
+		ax = fig.add_subplot(111,aspect='equal')
+		lines = []
+		s21_concurrent_c = cR * np.exp(np.complex(0.,ctheta)) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
+		# s21_concurrent_c = norm * np.exp(np.complex(0.,np.angle(np.complex(ca,cb)))) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
+		lines.append(ax.plot(s21_concurrent_c.real,s21_concurrent_c.imag, markersize  = 4, linestyle = 'None',color = 'g', marker = 'o', markerfacecolor = 'g', markeredgecolor = 'g',  label = r'Concurrent Fit -  $\sigma_{V\theta}$')[0])
 
-			fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
-			ax = fig.add_subplot(111,aspect='equal')
+		s21_concurrent_s = sR * np.exp(np.complex(0.,stheta)) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
+		#s21_concurrent_s = norm * np.exp(np.complex(0.,np.angle(np.complex(sa,sb)))) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
+		lines.append(ax.plot(s21_concurrent_s.real,s21_concurrent_s.imag,markersize  = 4, color = 'm',linestyle = 'None', marker = 'o', markerfacecolor = 'm', markeredgecolor = 'm',  label = r'Concurrent Fit -  $\sigma_{G}$')[0])
+		lines.append(ax.plot(s21_concurrent_s[0:Sample_Size:].real,s21_concurrent_s[0:Sample_Size:].imag,'m+', label = r'_Concurrent Fit -  $\sigma_{G}$')[0])
 
-			s21_concurrent_c = norm * cR * np.exp(np.complex(0.,ctheta)) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
-			# s21_concurrent_c = norm * np.exp(np.complex(0.,np.angle(np.complex(ca,cb)))) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
-			line = ax.plot(s21_concurrent_c.real,s21_concurrent_c.imag, markersize  = 4, linestyle = 'None',color = 'g', marker = 'o', markerfacecolor = 'g', markeredgecolor = 'g',  label = r'Concurrent Fit -  $\sigma_{V\theta}$')
-
-			s21_concurrent_s = norm * sR * np.exp(np.complex(0.,stheta)) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
-			#s21_concurrent_s = norm * np.exp(np.complex(0.,np.angle(np.complex(sa,sb)))) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
-			line = ax.plot(s21_concurrent_s.real,s21_concurrent_s.imag,markersize  = 4, color = 'm',linestyle = 'None', marker = 'o', markerfacecolor = 'm', markeredgecolor = 'm',  label = r'Concurrent Fit -  $\sigma_{G}$')
-			line = ax.plot(s21_concurrent_s[0:Sample_Size:].real,s21_concurrent_s[0:Sample_Size:].imag,'m+', label = r'_Concurrent Fit -  $\sigma_{G}$')
-
-			line = ax.plot(S21.real,S21.imag,markersize  = 4,color = 'b' ,marker = 'o',  linestyle = 'None',markerfacecolor = 'b', markeredgecolor = 'b', label = r'Raw Data - $S_{21}$')
-
-
-			s21_stepwise  = norm * R_0 * np.exp(np.complex(0.,theta_0)) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
-			#s21_stepwise  = norm * np.exp(np.complex(0.,np.angle(np.complex(a_0,b_0)))) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
-			line = ax.plot(s21_stepwise.real,s21_stepwise.imag,markersize  = 4, color = 'r', linestyle = 'None',marker = 'o', markerfacecolor = 'r', markeredgecolor = 'r', label = r'Stepwise Fit - $\hat{S}_{21}$')
+		lines.append(ax.plot(S21.real,S21.imag,markersize  = 4,color = 'b' ,marker = 'o',  linestyle = 'None',markerfacecolor = 'b', markeredgecolor = 'b', label = r'Raw Data - $S_{21}$')[0])
 
 
+		s21_stepwise  =  R_0 * np.exp(np.complex(0.,theta_0)) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
+		#s21_stepwise  = norm * np.exp(np.complex(0.,np.angle(np.complex(a_0,b_0)))) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
+		lines.append(ax.plot(s21_stepwise.real,s21_stepwise.imag,markersize  = 4, color = 'r', linestyle = 'None',marker = 'o', markerfacecolor = 'r', markeredgecolor = 'r', label = r'Stepwise Fit - $\hat{S}_{21}$')[0])
+		ax_dict.update({ax:lines})
 
-			ax.set_xlabel(r'$\Re[S_{21}(f)]$')
-			ax.set_ylabel(r'$\Im[S_{21}(f)]$')
-			ax.yaxis.labelpad = -2
-			ax.legend(loc = 'upper center', fontsize=5, bbox_to_anchor=(0.5, -0.1), ncol=2,scatterpoints =1, numpoints = 1, labelspacing = .02)
-			#ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
-			
-			if Save_Fig == True:
-				self._save_fig_dec(fig,'Concurrent_Fit_Index_{0}'.format(self.loop.index))
+
+		ax.set_xlabel(r'$\Re[S_{21}(f)]$')
+		ax.set_ylabel(r'$\Im[S_{21}(f)]$')
+		ax.yaxis.labelpad = -2
+		ax.legend(loc = 'upper center', fontsize=5, bbox_to_anchor=(0.5, -0.1), ncol=2,scatterpoints =1, numpoints = 1, labelspacing = .02)
+		#ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
+
+		plot_dict = fig_dict	
+
+		if  Show_Plot:	
 			plt.show()
 
-		return fit
+		if Save_Fig == True:
+			self._save_fig_dec(fig,'Concurrent_Fit_Index_{0}'.format(self.loop.index))
+		
+
+
+		return fit, plot_dict
 
 
 	def _angle(self, z, deg = 0, return_offset = False):
@@ -2754,11 +2766,11 @@ class sweep:
 			# Remove Gain Compression
 			self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
 			# Normalize Loop
-			norm = self.Sweep_Array['R'][index]
-			if (norm <= 0) or (norm == None):
-				print('Outer loop radius non valid. Using using 1')
-				norm  = 1
-			self.loop.z = self.loop.z/norm
+			Outer_Radius = self.Sweep_Array['R'][index]
+			if (Outer_Radius <= 0) or (Outer_Radius == None):
+				print('Outer loop radius non valid. Using 1')
+				Outer_Radius  = 1
+			self.loop.z = self.loop.z/Outer_Radius
 			#s21_mag = self.normalize_loop()
 
 			# Remove Cable Delay
@@ -2782,7 +2794,7 @@ class sweep:
 
 			if Compute_Chi2 is True: # Calculate variances for Chi2
 
-				#z_c = z_c*norm
+				#z_c = z_c*Outer_Radius
 				P_NA_in_V2 = np.square(np.abs(z_c)) * P_NA_out_V2
 				g_s , Tn_m_s ,Tn_p_s = self._construct_readout_chain(f_c) # get the gain chain
 				
@@ -2802,13 +2814,10 @@ class sweep:
 				sigma_squared_p = np.ones_like(f_c)
 
 
-			
-
-
 			if self.Sweep_Array['Is_Valid'][index] == True: 
-				power_sweep_list.append((V1,z_c,f_c,sigma_squared_m,sigma_squared_p,P_NA_out_V2 ))
+				power_sweep_list.append((V1,z_c,f_c,sigma_squared_m,sigma_squared_p,P_NA_out_V2,Outer_Radius))
 			else:
-				invalid_power_sweep_list.append((V1,z_c,f_c,sigma_squared_m,sigma_squared_p,P_NA_out_V2 ))
+				invalid_power_sweep_list.append((V1,z_c,f_c,sigma_squared_m,sigma_squared_p,P_NA_out_V2,Outer_Radius ))
 
 		
 		
@@ -2832,7 +2841,7 @@ class sweep:
 			sumsq = 0
 			N = 0 # total number of points in fit
 			for sweep in power_sweep_list:
-				V1_readout, S21_data, f,sigma_squared_m,sigma_squared_p,P_NA_out_V2 = sweep 
+				V1_readout, S21_data, f,sigma_squared_m,sigma_squared_p,P_NA_out_V2 ,Outer_Radius= sweep 
 
 				V3 = fd['V3'](S21_data,V1_readout)
 				v1 = V3*V3.conjugate()
@@ -2840,11 +2849,11 @@ class sweep:
 
 				#  Compute S21 and then Impose geometrical transformations to on it 
 				S21_fit = (fd['S21'](v1,f) -  np.complex(a,b))/np.exp(np.complex(0,phi)+ np.complex(0,2.0*np.pi*tau)*f)
-
+				
 				if Compute_Chi2 is True:
 
 					# Phase Mag approach doe not converge
-					diff = np.square(np.abs(S21_data) -  np.abs(S21_fit))*P_NA_out_V2/sigma_squared_m  + np.square(np.angle(S21_data/S21_fit))/sigma_squared_p  #(e^ia)/(e^ib) = e^i(a-b)
+					diff = np.square(( np.abs(S21_data) -  np.abs(S21_fit) ) * Outer_Radius)*P_NA_out_V2/sigma_squared_m  + np.square(np.angle(S21_data/S21_fit))/sigma_squared_p  #(e^ia)/(e^ib) = e^i(a-b)
 					
 					# Real Imaginary approach does not converge
 					#diff = np.square(S21_data.real -  S21_fit.real)*P_NA_out_V2/sigma_squared_m  + np.square(S21_data.imag -  S21_fit.imag)*P_NA_out_V2/sigma_squared_m  
@@ -2946,7 +2955,7 @@ class sweep:
 						
 
 			for sweep in power_sweep_list:
-				V1exp, S21exp, f ,sigma_squared_m,sigma_squared_p,P_NA_out_V2= sweep
+				V1exp, S21exp, f ,sigma_squared_m,sigma_squared_p,P_NA_out_V2,Outer_Radius= sweep
 				Pexp = 10*np.log10(V1exp*V1exp/(2 *Zfl*0.001))
 				dff = (f - fr)/fr
 				curve = ax[1].plot(dff,20*np.log10(np.abs(S21exp)), label = '$P_{probe}$ =' + ' {:3.2f} dBm'.format(Pexp)) # Pexp is Preadout
@@ -2972,6 +2981,7 @@ class sweep:
 						V3_cubic[n]    = np.sqrt(V3V3_cubic[n])
 						# S21_fit is adjused to take into accout fit parameters a,b,phi,tau 
 						S21_fit[n]  = (fd['S21'](V3V3_cubic[n],f[n]) - np.complex(a,b))*np.exp(np.complex(0,-phi)+ np.complex(0,-tau*2.0*np.pi)*f[n])
+						
 						# Note that V3_fit has the effect of a,b,phi,tau incorporated,  
 						# So it should no be expected to equal V3_cubic
 						V3_fit[n] = fd['V3'](S21_fit[n],V1exp)

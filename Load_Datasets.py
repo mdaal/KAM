@@ -82,9 +82,9 @@ if Ver == 2: #power sweeps
 	Run44aP     = KAM.sweep(); Run44aP.load_hf5('/Run44a/T201312101928', filename = database_location);  Run44aP.metadata.custom = dict(defaults);
 
 	Run45aP_Mock     = KAM.sweep(); Run45aP_Mock.load_hf5('/RunMock_45a/T201505011200', filename = database_location);  Run45aP_Mock.metadata.custom = dict(defaults); Run45aP_Mock.metadata.custom.update(show = False, linestyle = '-.', note= '; Sim')
+	Run48aP_Mock     = KAM.sweep(); Run48aP_Mock.load_hf5('/RunMock_48a/T201505011200', filename = database_location);  Run48aP_Mock.metadata.custom = dict(defaults); Run48aP_Mock.metadata.custom.update(show = False, linestyle = '-.', note= '; Sim')
 
-
-	Power_Sweeps = [Run51aP,Run51bP,Run49aP,Run48bP,Run48aP,Run46aPl,Run46aPh,Run45bP,Run45aP,Run44bP,Run44aP,Run52b1st,Run52b2nd, Run45aP_Mock]
+	Power_Sweeps = [Run51aP,Run51bP,Run49aP,Run48bP,Run48aP,Run46aPl,Run46aPh,Run45bP,Run45aP,Run44bP,Run44aP,Run52b1st,Run52b2nd, Run45aP_Mock,Run48aP_Mock]
 
 
 if Ver == 2: #temperature sweeps

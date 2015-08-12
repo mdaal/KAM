@@ -31,8 +31,8 @@ Ver = 2
 #
 #######################
 #data extraction conditions for  power sweeps
-#Power_Sweeps = [Run51aP,Run51bP,Run49aP ,Run48bP    , Run48aP  ,Run46aPl ,Run46aPh                ,Run45bP  ,Run45aP  ,Run44bP    ,Run44aP    ,Run52b1st  ,Run52b2nd, Run45aP_Mock ]
-condition =     ['Q>0'  ,'Q>0'  ,'Pr<-65','Qc<700000', 'Pr<-68' ,'Qc>0'   ,'(Q<210000)&(Qc>200e3)' ,'Pr<-45' ,'Pr<-60' ,'Qc<700000','Qc<200000','Qc<460e3'   ,'Q>0', 'Q>0']
+#Power_Sweeps = [Run51aP,Run51bP,Run49aP ,Run48bP    , Run48aP  ,Run46aPl ,Run46aPh                ,Run45bP  ,Run45aP  ,Run44bP    ,Run44aP    ,Run52b1st  ,Run52b2nd, Run45aP_Mock , Run48aP_Mock  ]
+condition =     ['Q>0'  ,'Q>0'  ,'Pr<-65','Qc<700000', 'Pr<-68' ,'Qc>0'   ,'(Q<210000)&(Qc>200e3)' ,'Pr<-45' ,'Pr<-60' ,'Qc<700000','Qc<200000','Qc<460e3'   ,'Q>0'   , 'Qc>0'       , 'Qc<350e3' ]
 for sweep in xrange(len(Power_Sweeps)):
     Power_Sweeps[sweep].metadata.condition = condition[sweep]
 
@@ -42,13 +42,14 @@ Power_Sweeps.sort(key = lambda w: w.metadata.Resonator_Width)
 
 
 
-Nonlinear_Fits = 0 #done
+Nonlinear_Fits = 1 #done
 Sim_Result = 0
 Power_Sweep_Plots = 0 #done
 Linear_to_Nonlinear_Example = 0 #done
 Run_45a_Mock_Data_Comparison = 0
+Run_48a_Mock_Data_Comparison = 0
 Run45aP_Complete_Fit_Plots = 0 #done
-Temp_Sweep_Plots = 1
+Temp_Sweep_Plots = 0 #done
 
 swp = KAM.sweep()
 
@@ -300,7 +301,8 @@ def Plot_TP_Data_Sets(X_expression, Y_expression, TP_Swp, Xlabel = None, Ylabel 
 if Nonlinear_Fits: 
 	index = 0 
 	Run45aP.pick_loop(index)
-	fit, fig, ax = Run45aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-1,None))
+	fit, fig, ax = Run45aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-1,None),Compute_Chi2 = True)
+	
 	# #Not Good
 	# Run45bP.pick_loop(index) #invalid values in sqrt
 	# Run45bP.nonlinear_fit(Save_Fig = True)
@@ -309,28 +311,30 @@ if Nonlinear_Fits:
 	# Run48aP.pick_loop(index)
 	# Run48aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-9,3))
 
-	Run49aP.pick_loop(index)
-	Run49aP.nonlinear_fit(Save_Fig = True, Indexing = (None,None,10))
+	# Run49aP.pick_loop(index)
+	# Run49aP.nonlinear_fit(Save_Fig = True, Indexing = (None,None,10))
 
-	Run44aP.pick_loop(index)
-	Run44aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-5,None))
+	# Run44aP.pick_loop(index)
+	# Run44aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-5,None))
 
+	# Run48aP.pick_loop(index)
+	# Run48aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-18,2))
 
-	Run46aPl.pick_loop(index) # consider comparing with Run46aPh
-	Run46aPl.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))
+	# Run46aPl.pick_loop(index) # consider comparing with Run46aPh
+	# Run46aPl.nonlinear_fit(Save_Fig = True,Indexing = (None,None,None))
 
-	Run51aP.pick_loop(index)
-	Run51aP.nonlinear_fit(Save_Fig = True,Indexing = (None,None,10))
+	# Run51aP.pick_loop(index)
+	# Run51aP.nonlinear_fit(Save_Fig = True,Indexing = (None,None,10))
 
-	Run51bP.pick_loop(index)
-	Run51bP.nonlinear_fit(Save_Fig = True,Indexing = (None,None,10))
+	# Run51bP.pick_loop(index)
+	# Run51bP.nonlinear_fit(Save_Fig = True,Indexing = (None,None,10))
 	
 	# #Does not converge
 	# Run52b1st.pick_loop(index)
 	# Run52b1st.nonlinear_fit(Save_Fig = True,Indexing = (80,60,None))
 
-	Run46aPh.pick_loop(index)
-	Run46aPh.nonlinear_fit(Save_Fig = True,Indexing = (None,-1,None))
+	# Run46aPh.pick_loop(index)
+	# Run46aPh.nonlinear_fit(Save_Fig = True,Indexing = (None,-1,None))
 
 if Sim_Result:
 	for s in Sims:
@@ -756,14 +760,124 @@ if Temp_Sweep_Plots:
 
 
 if Run45aP_Complete_Fit_Plots:
-	# ## Draw loops for Run45aP Data
+	## Draw loops for Run45aP Data
+	plot_dicts = []
 	for m in [100]: #[50,150, 200, 100]:
 		for index in [0,8,9,11]:
 			#m = 100
 			print "plotting index {}".format(index)
 			Run45aP.pick_loop(index)
-			fit = Run45aP.complete_fit( Use_Mask = True, Verbose = False, Show_Plot = True, Save_Fig = True,Sample_Size = m)
+			fit, plot_dict = Run45aP.complete_fit( Use_Mask = True, Verbose = False, Show_Plot = False, Save_Fig = False,Sample_Size = m)
+			plot_dicts.append(plot_dict) 
 			print 'chi^2: MP - {0}, G - {1} with m = {2}'.format(fit['cPowell'].fun, fit['sPowell'].fun,m)
+
+	# plotting index 0
+	# chi^2: MP - 0.234755584011, G - 1.05145565626 with m = 50
+	# plotting index 8
+	# chi^2: MP - 46822.9402921, G - 248196.101986 with m = 50
+	# plotting index 9
+	# chi^2: MP - 103826.776093, G - 403093.134316 with m = 50
+	# plotting index 11
+	# chi^2: MP - 204853.056233, G - 640971.056562 with m = 50
+	# plotting index 0
+	# chi^2: MP - 0.234755584011, G - 0.964278312331 with m = 100
+	# plotting index 8
+	# chi^2: MP - 46822.9402921, G - 233317.262969 with m = 100
+	# plotting index 9
+	# chi^2: MP - 103826.776093, G - 369175.218769 with m = 100
+	# plotting index 11
+	# chi^2: MP - 204853.056233, G - 635989.853722 with m = 100
+	# plotting index 0
+	# chi^2: MP - 0.234755584011, G - 0.935469720074 with m = 150
+	# plotting index 8
+	# chi^2: MP - 46822.9402921, G - 209739.731831 with m = 150
+	# plotting index 9
+	# chi^2: MP - 103826.776093, G - 354493.448172 with m = 150
+	# plotting index 11
+	# chi^2: MP - 204853.056233, G - 592700.378301 with m = 150
+	# plotting index 0
+	# chi^2: MP - 0.234755584011, G - 1.00280100571 with m = 200
+	# plotting index 8
+	# chi^2: MP - 46822.9402921, G - 203426.099189 with m = 200
+	# plotting index 9
+	# chi^2: MP - 103826.776093, G - 351804.133695 with m = 200
+	# plotting index 11
+	# chi^2: MP - 204853.056233, G - 610462.544858 with m = 200
+
+
+
+
+	Xlabel  = r'$\Re[S_{21}(f)]$'
+	Ylabel =  r'$\Im[S_{21}(f)]$'
+	Save = True
+	Title  = '45a_Concurrent_Fit_Pprobe_100_72_70_66'
+
+	fig = plt.figure( figsize=(6, 6), dpi=150)
+	ax_list = []
+	gs = gridspec.GridSpec(2, 2)
+	ax = plt.subplot(gs[0, 0], aspect='equal' )
+	ax_list.append(ax)
+	ax = plt.subplot(gs[0, 1], aspect='equal' )
+	ax_list.append(ax)
+	ax = plt.subplot(gs[1, 0], aspect='equal' )
+	ax_list.append(ax)
+	ax = plt.subplot(gs[1, 1], aspect='equal')
+	ax_list.append(ax)
+	gs.update(hspace=0.1, wspace=0.1)
+
+	fig.text(0.5, 0.15, Xlabel, ha='center')
+	fig.text(0.1, 0.5, Ylabel, va='center', rotation='vertical')
+	frm = {}
+	lcr = {}
+	axs = []
+	lcrx = {}
+	for i in range(len(ax_list)):
+		plot_dict = plot_dicts[i]
+		(f,ax_dict) = plot_dict.popitem()
+		(a , Lines_List)  = ax_dict.popitem()
+		axs.append(a)
+		for line in Lines_List:
+			ax_list[i].plot(line.get_data()[0], line.get_data()[1],linewidth=line.get_linewidth(), marker = line.get_marker(),
+				markeredgecolor = line.get_markeredgecolor(),  markerfacecolor = line.get_markerfacecolor(),
+				markersize = line.get_markersize(), label = line.get_label(), linestyle = line.get_linestyle(),
+				)#color = lines[key].get_color())
+		ax_list[i].set_xscale(axs[0].get_xscale())
+		ax_list[i].set_yscale(axs[0].get_yscale())
+		frm[i] = mpl.ticker.ScalarFormatter(useOffset=False, useMathText=None, useLocale=None)
+		frm[i].set_powerlimits((2,7))
+		frm[i].set_scientific(True)
+		lcr[i] = mpl.ticker.MaxNLocator( prune='both') 
+		lcr[i].set_params(nbins=6)
+		lcrx[i] = mpl.ticker.MaxNLocator( prune='both') 
+		lcrx[i].set_params(nbins=8)
+		ax_list[i].yaxis.set_major_formatter(frm[i])
+		ax_list[i].yaxis.set_major_locator(lcr[i])
+		#ax_list[i].xaxis.set_major_formatter(frm[i])
+		ax_list[i].xaxis.set_major_locator(lcrx[i])
+		#ax_list[i].set_xlim(left = Xlimits[0], right = Xlimits[1])
+
+		ax_list[i].tick_params(axis='y', labelsize=6)
+		ax_list[i].tick_params(axis='x', labelsize=6)
+
+		ax_list[i].grid()
+	plt.subplots_adjust(left=.2, bottom=0.2, right=None, top=.95)
+
+	ax_list[2].legend(loc = 'upper center', fontsize=6, bbox_to_anchor=(1, -0.35), ncol=4,scatterpoints =1, numpoints = 1, labelspacing = .02)
+	#ax_list[0].set_xticklabels([''],visible = False)
+	#ax_list[1].set_xticklabels([''],visible = False)
+	#ax_list[1].set_yticklabels([''],visible = False)
+	#ax_list[3].set_yticklabels([''],visible = False)
+	ax_list[0].xaxis.tick_top()
+	ax_list[1].yaxis.tick_right()
+	ax_list[1].xaxis.tick_top()
+	ax_list[3].yaxis.tick_right()
+	#ax[2].xaxis.labelpad = 10
+	# lcr[1].set_params(nbins=6)   
+	# lcr[2].set_params(nbins=8) 
+	#ax[1].set_ylim(bottom = Ylimits_Top[0], top= Ylimits_Top[1])
+	if Save == True:
+		swp._save_fig_dec(fig, Title.replace('\n','_').replace(' ','_')+'.eps', Use_Date = Use_Date )
+
 
 	Draw_Loops_For_Sim_Data = 0 
 	if Draw_Loops_For_Sim_Data:
@@ -804,6 +918,170 @@ if Run45aP_Complete_Fit_Plots:
 	# plotting index 11
 	# chi^2: MP - 204853.056233, G - 610462.544858 with m = 200
 
+
+# ### Run 48a Mock Data Comparison
+if Run_48a_Mock_Data_Comparison:
+	Qi_Probe_Power = 1
+	if Qi_Probe_Power:
+		if 1: 
+		    temp = Power_Sweeps
+		    Power_Sweeps = [Run48aP, Run48aP_Mock]
+		    Run48aP_Mock.metadata.custom['show'] = True
+		    Save = False
+		    Xlabel = 'Probe Power [dBm]'
+		    Ylabel = 'Internal Quality Factor, $Q_i$'
+		    Title = 'Internal Quality Factor versus\nProbe Power'
+		    Show_Title = False
+		    select1 = Plot_Data_Sets("Pr", "Qi", Xlabel = Xlabel, Ylabel = Ylabel, Title = Title, Save = Save,Show_Plot =False, Show_Title = Show_Title, Point_Label = False)
+		    Title = 'Internal Quality Factor versus\nProbe Power-Complete Fit'
+		    Show_Title = False
+		    select2 = Plot_Data_Sets("Pr", "cQi", Xlabel = Xlabel, Ylabel = Ylabel, Title = Title, Save = Save, Show_Plot =False, Show_Title = Show_Title, Point_Label = False)
+		    Run48aP_Mock.metadata.custom['show'] = False
+		    Power_Sweeps = temp
+
+		#select2[2] #Qi concurrent fit - 6 reg
+		#select1[2] #Qi stepwise fit - 7 mock, 6 reg
+		lines = {1 : select2[2][0],2 : select2[2][1],3 : select1[2][0],4 : select1[2][1]}
+		select1[2][0].set_label(select1[2][0].get_label() + '; SW') 
+		select1[2][1].set_label(select1[2][1].get_label() + '; SW') 
+		select2[2][0].set_label(select2[2][0].get_label() + '; CC')
+		select2[2][1].set_label(select2[2][1].get_label() + '; CC')
+		def Replot_Selected(handles,lines, Title = None, Xlabel = None, Ylabel = None,Show_Plot = False, Save = False): 
+		    ax0 = handles[1]
+		    #fig = plt.figure(figsize=(5, 5), dpi=150)
+		    ax = {} 
+		    frm = {} #tick formator
+		    lcr= {} #tick locator
+
+		    fig = plt.figure( figsize=(5.5,6), dpi=150)
+		    ax[1] = fig.add_subplot(111)
+
+		    fig.text(0.5, 0.125, Xlabel, ha='center')
+		    fig.text(0.025, 0.5, Ylabel, va='center', rotation='vertical')
+
+		    
+
+		    for n in [1]:
+		        for key in lines.keys():
+		            ax[n].plot(lines[key].get_data()[0], lines[key].get_data()[1],linewidth=lines[key].get_linewidth(), marker = lines[key].get_marker(),
+		                       markeredgecolor = lines[key].get_markeredgecolor(),  markerfacecolor = lines[key].get_markerfacecolor(),
+		                       markersize = lines[key].get_markersize(), label = lines[key].get_label(), linestyle = lines[key].get_linestyle(),
+		                       )#color = lines[key].get_color())
+		        ax[n].set_xscale(ax0.get_xscale())
+		        ax[n].set_yscale(ax0.get_yscale())
+		        #ax[n].tick_params(axis='y',pad = 10)
+		        frm[n] = mpl.ticker.ScalarFormatter(useOffset=False, useMathText=None, useLocale=None)
+		        frm[n].set_powerlimits((2,7))
+		        frm[n].set_scientific(True)
+		        lcr[n] = mpl.ticker.MaxNLocator( prune='both') 
+		        ax[n].yaxis.set_major_formatter(frm[n])
+		        ax[n].yaxis.set_major_locator(lcr[n])
+		        #ax[n].set_xlim(left = Xlimits[0], right = Xlimits[1])
+
+		        ax[n].tick_params(axis='y', labelsize=9)
+		        ax[n].tick_params(axis='x', labelsize=9)
+
+		        ax[n].grid()
+		    ax[1].legend(loc = 'upper center', fontsize=5, bbox_to_anchor=(0.45, -0.15), ncol=3,scatterpoints =1, numpoints = 1, labelspacing = .02)
+		    #ax[1].set_xticklabels([''],visible = False)
+		    ax[1].yaxis.labelpad = 4
+		    ax[1].xaxis.labelpad = 1
+		    #lcr[1].set_params(nbins=6)   
+		    #lcr[2].set_params(nbins=8) 
+		    #ax[1].set_ylim(bottom = Ylimits_Top[0], top= Ylimits_Top[1])
+		    plt.subplots_adjust(left=.2, bottom=0.2, right=None, top=.95)
+		    if Save == True:
+		    	swp._save_fig_dec(fig, Title.replace('\n','_').replace(' ','_'), Use_Date =  Use_Date)
+		    if Show_Plot == False:
+		        plt.close() 
+		        
+		if 1: 
+		    Save = True
+		    Xlabel = 'Probe Power [dBm]'
+		    Ylabel = 'Internal Quality Factor, $Q_i$'
+		    Title = 'Internal Quality Factor versus\nProbe Power Run48a'
+		    Replot_Selected(select2, lines , Title = Title, Xlabel = Xlabel, Ylabel = Ylabel,Save = Save,Show_Plot = Show_Plot) 
+
+	Qc_Probe_Power = 1
+	if Qc_Probe_Power:
+		if 1: 
+		    temp = Power_Sweeps
+		    Power_Sweeps = [Run48aP, Run48aP_Mock]
+		    Run48aP_Mock.metadata.custom['show'] = True
+		    Save = False
+		    Xlabel = 'Probe Power [dBm]'
+		    Ylabel = 'Coupling Quality Factor, $Q_c$'
+		    Title = 'Coupling Quality Factor versus\nProbe Power'
+		    Show_Title = False
+		    select1 = Plot_Data_Sets("Pr", "Qc", Xlabel = Xlabel, Ylabel = Ylabel, Title = Title, Save = Save,Show_Plot =False, Show_Title = Show_Title, Point_Label = False)
+		    Title = 'Coupling Quality Factor versus\nProbe Power-Complete Fit'
+		    Show_Title = False
+		    select2 = Plot_Data_Sets("Pr", "cQc", Xlabel = Xlabel, Ylabel = Ylabel, Title = Title, Save = Save, Show_Plot =False, Show_Title = Show_Title, Point_Label = False)
+		    Run48aP_Mock.metadata.custom['show'] = False
+		    Power_Sweeps = temp
+
+		#select2[2] #Qi concurrent fit - 6 reg
+		#select1[2] #Qi stepwise fit - 7 mock, 6 reg
+		lines = {1 : select2[2][0],2 : select2[2][1],3 : select1[2][0],4 : select1[2][1]}
+		select1[2][0].set_label(select1[2][0].get_label() + '; SW') 
+		select1[2][1].set_label(select1[2][1].get_label() + '; SW') 
+		select2[2][0].set_label(select2[2][0].get_label() + '; CC')
+		select2[2][1].set_label(select2[2][1].get_label() + '; CC')
+		def Replot_Selected(handles,lines, Title = None, Xlabel = None, Ylabel = None,Show_Plot = False, Save = False): 
+		    ax0 = handles[1]
+		    #fig = plt.figure(figsize=(5, 5), dpi=150)
+		    ax = {} 
+		    frm = {} #tick formator
+		    lcr= {} #tick locator
+
+		    fig = plt.figure( figsize=(5.5,6), dpi=150)
+		    ax[1] = fig.add_subplot(111)
+
+		    fig.text(0.5, 0.125, Xlabel, ha='center')
+		    fig.text(0.025, 0.5, Ylabel, va='center', rotation='vertical')
+
+		    
+
+		    for n in [1]:
+		        for key in lines.keys():
+		            ax[n].plot(lines[key].get_data()[0], lines[key].get_data()[1],linewidth=lines[key].get_linewidth(), marker = lines[key].get_marker(),
+		                       markeredgecolor = lines[key].get_markeredgecolor(),  markerfacecolor = lines[key].get_markerfacecolor(),
+		                       markersize = lines[key].get_markersize(), label = lines[key].get_label(), linestyle = lines[key].get_linestyle(),
+		                       )#color = lines[key].get_color())
+		        ax[n].set_xscale(ax0.get_xscale())
+		        ax[n].set_yscale(ax0.get_yscale())
+		        #ax[n].tick_params(axis='y',pad = 10)
+		        frm[n] = mpl.ticker.ScalarFormatter(useOffset=False, useMathText=None, useLocale=None)
+		        frm[n].set_powerlimits((2,7))
+		        frm[n].set_scientific(True)
+		        lcr[n] = mpl.ticker.MaxNLocator( prune='both') 
+		        ax[n].yaxis.set_major_formatter(frm[n])
+		        ax[n].yaxis.set_major_locator(lcr[n])
+		        #ax[n].set_xlim(left = Xlimits[0], right = Xlimits[1])
+
+		        ax[n].tick_params(axis='y', labelsize=9)
+		        ax[n].tick_params(axis='x', labelsize=9)
+
+		        ax[n].grid()
+		    ax[1].legend(loc = 'upper center', fontsize=5, bbox_to_anchor=(0.45, -0.15), ncol=3,scatterpoints =1, numpoints = 1, labelspacing = .02)
+		    #ax[1].set_xticklabels([''],visible = False)
+		    ax[1].yaxis.labelpad = 4
+		    ax[1].xaxis.labelpad = 1
+		    #lcr[1].set_params(nbins=6)   
+		    #lcr[2].set_params(nbins=8) 
+		    #ax[1].set_ylim(bottom = Ylimits_Top[0], top= Ylimits_Top[1])
+		    plt.subplots_adjust(left=.2, bottom=0.2, right=None, top=.95)
+		    if Save == True:
+		    	swp._save_fig_dec(fig, Title.replace('\n','_').replace(' ','_'), Use_Date =  Use_Date)
+		    if Show_Plot == False:
+		        plt.close() 
+		        
+		if 1: 
+		    Save = True
+		    Xlabel = 'Probe Power [dBm]'
+		    Ylabel = 'Coupling Quality Factor, $Q_c$'
+		    Title = 'Coupling Quality Factor versus\nProbe Power Run48a'
+		    Replot_Selected(select2, lines , Title = Title, Xlabel = Xlabel, Ylabel = Ylabel,Save = Save,Show_Plot = Show_Plot) 
 
 # ### Run 45a Mock Data Comparison
 if Run_45a_Mock_Data_Comparison:
