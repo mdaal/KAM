@@ -5,6 +5,8 @@ reload(KAM)
 
 database_location = 'Data/My_Data_Library.h5'
 
+Ver = 1
+
 if Ver == 1: #power sweeps 
 	Run52b1st	= KAM.sweep(); Run52b1st.load_hf5('/Run52b/T201503112352',filename = database_location); Run52b1st.metadata.width = 256; Run52b1st.metadata.custom = [True, '; hex gnd', '--',None]
 	Run52b2nd	= KAM.sweep(); Run52b2nd.load_hf5('/Run52b/T201503041056',filename = database_location); Run52b2nd.metadata.width = 256; Run52b2nd.metadata.custom = [False,'; hex gnd; $f_1$', ':',None]

@@ -42,14 +42,16 @@ Power_Sweeps.sort(key = lambda w: w.metadata.Resonator_Width)
 
 
 
-Nonlinear_Fits = 1 #done
+Nonlinear_Fits = 0 #done
 Sim_Result = 0
 Power_Sweep_Plots = 0 #done
+Temp_Sweep_Plots = 0 #done
 Linear_to_Nonlinear_Example = 0 #done
 Run_45a_Mock_Data_Comparison = 0
 Run_48a_Mock_Data_Comparison = 0
 Run45aP_Complete_Fit_Plots = 0 #done
-Temp_Sweep_Plots = 0 #done
+Nonlinear_Curves_Run45a = 0
+t21_Calc = 1
 
 swp = KAM.sweep()
 
@@ -77,14 +79,14 @@ def Plot_Data_Sets(X_expression, Y_expression, Xlabel = None, Ylabel = None, Tit
 	            Qc = Power_Sweeps[sweep].Sweep_Array['Qc']
 	            Q =  Power_Sweeps[sweep].Sweep_Array['Q']
 	            Fr =  Power_Sweeps[sweep].Sweep_Array['Fr']
-	            Fr_min =Fr[0] if Power_Sweeps[sweep].metadata.custom['cF_min'] == None else eval(Power_Sweeps[sweep].metadata.custom['cF_min'])
+	            Fr_min =Fr[0] if Power_Sweeps[sweep].metadata.custom['F_min'] == None else eval(Power_Sweeps[sweep].metadata.custom['F_min'])
 	            Temp = Power_Sweeps[sweep].Sweep_Array['Temperature']
 	            Chi_Squared = Power_Sweeps[sweep].Sweep_Array['Chi_Squared']
 	            cChi_Squared = Power_Sweeps[sweep].Sweep_Array['cChi_Squared']
 	            cQc = Power_Sweeps[sweep].Sweep_Array['cQc']
 	            cQ =  Power_Sweeps[sweep].Sweep_Array['cQ']
 	            cFr =  Power_Sweeps[sweep].Sweep_Array['cFr']
-	            cFr_min =cFr[0] if Power_Sweeps[sweep].metadata.custom['F_min'] == None else eval(Power_Sweeps[sweep].metadata.custom['F_min'])
+	            cFr_min =cFr[0] if Power_Sweeps[sweep].metadata.custom['cF_min'] == None else eval(Power_Sweeps[sweep].metadata.custom['cF_min'])
 	            cQi = 1.0/((1.0/cQ)-(1.0/cQc))
 	            Qi = 1.0/((1.0/Q)-(1.0/Qc))
 	            Res_Tk = Power_Sweeps[sweep].metadata.Resonator_Thickness
@@ -222,10 +224,15 @@ def Plot_TP_Data_Sets(X_expression, Y_expression, TP_Swp, Xlabel = None, Ylabel 
             mark = markers[index+1]
         else:
             mark ='.'
+        Fr_min = TP_Swp[index].Sweep_Array['Fr'][ (TP_Swp[index].Sweep_Array['Pinput_dB'] == min(TP_Swp[index].Sweep_Array['Pinput_dB'])) & (TP_Swp[index].Sweep_Array['Heater_Voltage'] == min(TP_Swp[index].Sweep_Array['Heater_Voltage']))][0]
+        Qc_min = TP_Swp[index].Sweep_Array['Qc'][ (TP_Swp[index].Sweep_Array['Pinput_dB'] == min(TP_Swp[index].Sweep_Array['Pinput_dB'])) & (TP_Swp[index].Sweep_Array['Heater_Voltage'] == min(TP_Swp[index].Sweep_Array['Heater_Voltage']))][0]
+        Q_min = TP_Swp[index].Sweep_Array['Q'][ (TP_Swp[index].Sweep_Array['Pinput_dB'] == min(TP_Swp[index].Sweep_Array['Pinput_dB'])) & (TP_Swp[index].Sweep_Array['Heater_Voltage'] == min(TP_Swp[index].Sweep_Array['Heater_Voltage']))][0]
+        Qi_min = 1.0/((1.0/Q_min)-(1.0/Qc_min))
+        #print TP_Swp[index].metadata.Run, Fr_min
         for power in powers:   
             if power not in set(Pinput_dB):
                 continue
-                
+               
             cond = eval(TP_Swp[index].metadata.condition);
             cond = (TP_Swp[index].Sweep_Array['Pinput_dB'] == power) & (cond) & (TP_Swp[index].Sweep_Array['Is_Valid'] == True) 
             Fr_power = np.extract(cond,Fr)
@@ -296,12 +303,13 @@ def Plot_TP_Data_Sets(X_expression, Y_expression, TP_Swp, Xlabel = None, Ylabel 
 
 ###########################
 
-
+if Nonlinear_Curves_Run45a:
+	%run -i Quantum_Model_2.py
 
 if Nonlinear_Fits: 
 	index = 0 
 	Run45aP.pick_loop(index)
-	fit, fig, ax = Run45aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-1,None),Compute_Chi2 = True)
+	fit, fig, ax = Run45aP.nonlinear_fit(Save_Fig = True,Indexing = (None,-1,None),Compute_Chi2 = False)
 	
 	# #Not Good
 	# Run45bP.pick_loop(index) #invalid values in sqrt
@@ -668,8 +676,8 @@ if Power_Sweep_Plots:
 
 
 if Temp_Sweep_Plots:
-	#TP_Sweeps =    [Run51aTP,Run51bTP,Run48bTP,Run49aTP           ,Run48aTP,Run46aTP,Run45aTP,Run44bTP,Run44aTP,Run52bTP2ndh,Run52bTP2ndl,Run52bTP1st]
-	condition =     ['Temp>0','Temp>0','Temp>0','(Temp>0)&(Qi<8e5)','Temp>0','Temp>0','Temp>0','Temp>0','Temp>0','Temp>0'    ,'Temp>0'   ,'Temp>0']
+	#TP_Sweeps =    [Run51aTP, Run51bTP,         Run48bTP, Run49aTP ,Run48aTP,  Run46aTP,Run45aTP,Run44bTP,Run44aTP,Run52bTP2ndh,Run52bTP2ndl,  Run52bTP1st]
+	condition =     ['Temp>0','(Qi<1e6) &(Qi>0)','Temp>0','(Qi<8e5)','Qi>0','(Fr>6.8e8)&(Qi>0)','Temp>0','Temp>0','Temp>0','Temp>0'    ,'Temp>0'   ,'(Qi<1e6)&(Qi>0)']
 	for sweep in xrange(len(TP_Sweeps)):
 		TP_Sweeps[sweep].metadata.condition = condition[sweep]
 	#######################
@@ -687,8 +695,8 @@ if Temp_Sweep_Plots:
 	Frac_Freq_Shift = 1
 	if Frac_Freq_Shift:
 		#data = [Run51bTP]
-		#data =[16um    ,4um     ,32um    ,8um     , 256um  , 256um      ]
-		data = [Run51bTP,Run49aTP,Run51aTP,Run45aTP,Run46aTP, Run52bTP1st]
+		#data =[4um     ,16um     ,8um     ,32um    ,256um  , 256um      ]
+		data = [Run49aTP,Run51bTP,Run45aTP,Run51aTP,Run46aTP, Run52bTP1st]
 
 		Save = True
 		Xlabel = r'Temperature [K]'
@@ -696,8 +704,8 @@ if Temp_Sweep_Plots:
 		Title = 'Fractional Frequency Shift versus\nTemperature'
 		Show_Title = False
 		Xlimits = [None,None]
-		h1 = Plot_TP_Data_Sets("Temp","(Fr-max(Fr_power))/max(Fr_power)",data, Xlabel = Xlabel, Ylabel = Ylabel, Title = Title, Show_Title = Show_Title, Save = Save,Marker_Map = True,Yscale = 'linear', Xscale = 'linear',Xlimits = Xlimits)
-
+		h1 = Plot_TP_Data_Sets("Temp","(Fr-Fr_min)/Fr_min",data, Xlabel = Xlabel, Ylabel = Ylabel, Title = Title, Show_Title = Show_Title, Save = Save,Marker_Map = True,Yscale = 'linear', Xscale = 'linear',Xlimits = Xlimits)
+		#"(Fr-max(Fr))/max(Fr)"
 
 	Qi_Shift = 1
 	if Qi_Shift:
@@ -711,19 +719,21 @@ if Temp_Sweep_Plots:
 		Xlimits = [None,0.4]
 		h2 = Plot_TP_Data_Sets("Temp","Qi",data, Xlabel = Xlabel, Ylabel = Ylabel, Title = Title, Show_Title = Show_Title, Save = Save,Marker_Map = True,Yscale = 'linear', Xscale = 'linear', Xlimits = Xlimits)
 	
-	Frac_Q_Shift = 0
+	Frac_Q_Shift = 1
 	if Frac_Q_Shift:
 		if 1:
-			data = [Run51bTP,Run51aTP,Run45aTP,Run46aTP, Run52bTP1st]
-			Save = False
+			#data = [Run51bTP,Run51aTP,Run45aTP,Run46aTP, Run52bTP1st]
+			#data =[16um    ,4um     ,32um    ,8um     , 256um  , 256um      ]
+			data = [Run51bTP,Run49aTP,Run51aTP,Run45aTP,Run46aTP, Run52bTP1st]
+			Save = True
 			Xlabel = r'Temperature [K]'
 			Ylabel = r'Fractional Quality Factor Shift, $\delta \frac{1}{Q_i}$'
 			Title = 'Fractional Quality Factor versus\nTemperature'
 			Show_Title = False
 			Xlimits = [None,None]
-			h3 = Plot_TP_Data_Sets("Temp","((1/Qi)-(1/max(Qi_power)))/(1/max(Qi_power))",data, Xlabel = Xlabel, Ylabel = Ylabel, Title = Title, Show_Title = Show_Title, Save = Save,Marker_Map = True,Yscale = 'linear', Xscale = 'linear',Xlimits = Xlimits)
+			h3 = Plot_TP_Data_Sets("Temp","((1/Qi)-(1/(Qi_min)))/(1/Qi_min)",data, Xlabel = Xlabel, Ylabel = Ylabel, Title = Title, Show_Title = Show_Title, Save = Save,Marker_Map = True,Yscale = 'linear', Xscale = 'linear',Xlimits = Xlimits)
 
-		if 1:
+		if 0:
 		    data = [Run49aTP]
 		    Save = True
 		    Xlabel = r'Temperature [K]'
@@ -840,7 +850,7 @@ if Run45aP_Complete_Fit_Plots:
 			ax_list[i].plot(line.get_data()[0], line.get_data()[1],linewidth=line.get_linewidth(), marker = line.get_marker(),
 				markeredgecolor = line.get_markeredgecolor(),  markerfacecolor = line.get_markerfacecolor(),
 				markersize = line.get_markersize(), label = line.get_label(), linestyle = line.get_linestyle(),
-				)#color = lines[key].get_color())
+				)#color = lines[key].get_color())    markersize = 
 		ax_list[i].set_xscale(axs[0].get_xscale())
 		ax_list[i].set_yscale(axs[0].get_yscale())
 		frm[i] = mpl.ticker.ScalarFormatter(useOffset=False, useMathText=None, useLocale=None)
@@ -877,7 +887,7 @@ if Run45aP_Complete_Fit_Plots:
 	#ax[1].set_ylim(bottom = Ylimits_Top[0], top= Ylimits_Top[1])
 	if Save == True:
 		swp._save_fig_dec(fig, Title.replace('\n','_').replace(' ','_')+'.eps', Use_Date = Use_Date )
-
+	plt.show()
 
 	Draw_Loops_For_Sim_Data = 0 
 	if Draw_Loops_For_Sim_Data:
@@ -1294,3 +1304,69 @@ if Linear_to_Nonlinear_Example:
 	if Show_Plot == False:
 	    plt.close() 
 
+
+if t21_Calc:
+
+	for Pprobe_dBm in [-20, -30, -40, -50, -60]:
+		from scipy import constants
+		from scipy import special
+		k = constants.value('Boltzmann constant in eV/K') #unit is [J/k]
+		hbar = constants.value('Planck constant over 2 pi in eV s')
+		k2 = constants.value('Boltzmann constant') #unit is [J/k]
+
+		Z0 = 50 #ohm
+		# Pprobe_dBm = -50
+		Pprobe_W = 0.001* np.power(10.0,Pprobe_dBm/10.0) #watts
+		V_probe = np.sqrt(Pprobe_W *2*Z0) #volts
+
+		E = 100.e3 # keV
+		alpha = 0.005
+		gamma = -1.0/2.0
+		Q = 33.3e3
+		Qc = 40.e3
+		
+		Delta0 = 0.182e-3 #milli eV
+		pq_efficiency = 0.5 #percentage of phonon conversion to qp
+		N0 = 1.72e10 # um^-3 * eV^-1
+
+		dNqp = pq_efficiency * E/(2*Delta0)
+
+
+
+		#dimensions
+		# length = 10.*1000 #micrometers
+		# width  = 10.*1000 #micrometers
+		# thckness = 0.3 #micrometers
+		V = 33000000.0 #length*width*thckness # micrometers^3 <---- S8 patch area
+
+		dnqp =  dNqp /V
+
+		f0 = 700.e6 #Hz
+		omega = f0 *2 *np.pi
+		T = 0.04 #kelvin
+
+		xi = hbar * omega / (2*k* T)
+
+
+		I0 = special.jv #bessel function of first kind
+		K0 = special.yv #bessel function of second kind
+
+		kappa = np.complex((1/(np.pi * N0)) * np.sqrt(2.0/(np.pi*k*T*Delta0)) * np.sinh(xi)*K0(0,xi) , (1.0 + np.sqrt(2.0*Delta0/(np.pi*k*T))*np.exp(-xi)*I0(0,xi))/(2*N0*Delta0))
+
+		t21 =  alpha*np.abs(gamma)*kappa*(Q*Q/Qc)*dnqp
+
+		Delta_V = np.abs(t21 * V_probe)
+
+
+		#noise
+		Tn =  6.3 # Kelvin to match effective T from previous section of thesis ... np.polynomial.chebyshev.chebval(f0,Run51aP.metadata.System_Calibration['SiGe #2']['Tn_m_fit']) # use 5.9 Kelvin at 0.7 GHz
+		BW = f0/Q
+		V_rms = np.sqrt(4 * k2 * Tn * Z0 * BW)
+
+		#Signal to noise
+		SN = Delta_V / V_rms
+
+		#energy res
+		dE = E * (1/SN)
+
+		print 'Pprobe  = {2}, SNR = {0}, dE = {1}'.format(SN,dE,Pprobe_dBm)

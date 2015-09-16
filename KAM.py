@@ -8,15 +8,37 @@ import numpy as np
 
 import tables
 import matplotlib as mpl
-# mpl.use("pgf")
+
+#mpl.use("pgf")
 pgf_with_pdflatex = {
     "pgf.texsystem": "pdflatex",
     "pgf.preamble": [
          r"\usepackage[utf8x]{inputenc}",
          r"\usepackage[T1]{fontenc}",
-         r"\usepackage{cmbright}",
+         #r"\usepackage{cmbright}",
          ]
 }
+
+# pgf_with_latex = {                      # setup matplotlib to use latex for output
+#     "pgf.texsystem": "pdflatex",        # change this if using xetex or lautex
+#     "text.usetex": True,                # use LaTeX to write all text
+#     "font.family": "serif",
+#     "font.serif": [],                   # blank entries should cause plots to inherit fonts from the document
+#     "font.sans-serif": [],
+#     "font.monospace": [],
+#     "axes.labelsize": 10,               # LaTeX default is 10pt font.
+#     "text.fontsize": 10,
+#     "legend.fontsize": 8,               # Make the legend/label fonts a little smaller
+#     "xtick.labelsize": 8,
+#     "ytick.labelsize": 8,
+#     #"figure.figsize": figsize(0.9),     # default fig size of 0.9 textwidth
+#     "pgf.preamble": [
+#         r"\usepackage[utf8x]{inputenc}",    # use utf8 fonts becasue your computer can handle it :)
+#         r"\usepackage[T1]{fontenc}",        # plots will be generated using this preamble
+#         ]
+#     }
+
+
 mpl.rcParams.update(pgf_with_pdflatex)
 import matplotlib.pyplot as plt
 # plt.switch_backend('pgf')
@@ -2544,19 +2566,19 @@ class sweep:
 		lines = []
 		s21_concurrent_c = cR * np.exp(np.complex(0.,ctheta)) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
 		# s21_concurrent_c = norm * np.exp(np.complex(0.,np.angle(np.complex(ca,cb)))) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
-		lines.append(ax.plot(s21_concurrent_c.real,s21_concurrent_c.imag, markersize  = 4, linestyle = 'None',color = 'g', marker = 'o', markerfacecolor = 'g', markeredgecolor = 'g',  label = r'Concurrent Fit -  $\sigma_{V\theta}$')[0])
+		lines.append(ax.plot(s21_concurrent_c.real,s21_concurrent_c.imag, markersize  = 3, linestyle = 'None',color = 'g', marker = 'o', markerfacecolor = 'g', markeredgecolor = 'g',  label = r'Concurrent Fit -  $\sigma_{V\theta}$')[0])
 
 		s21_concurrent_s = sR * np.exp(np.complex(0.,stheta)) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
 		#s21_concurrent_s = norm * np.exp(np.complex(0.,np.angle(np.complex(sa,sb)))) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
-		lines.append(ax.plot(s21_concurrent_s.real,s21_concurrent_s.imag,markersize  = 4, color = 'm',linestyle = 'None', marker = 'o', markerfacecolor = 'm', markeredgecolor = 'm',  label = r'Concurrent Fit -  $\sigma_{G}$')[0])
+		lines.append(ax.plot(s21_concurrent_s.real,s21_concurrent_s.imag,markersize  = 3, color = 'm',linestyle = 'None', marker = 'o', markerfacecolor = 'm', markeredgecolor = 'm',  label = r'Concurrent Fit -  $\sigma_{G}$')[0])
 		lines.append(ax.plot(s21_concurrent_s[0:Sample_Size:].real,s21_concurrent_s[0:Sample_Size:].imag,'m+', label = r'_Concurrent Fit -  $\sigma_{G}$')[0])
 
-		lines.append(ax.plot(S21.real,S21.imag,markersize  = 4,color = 'b' ,marker = 'o',  linestyle = 'None',markerfacecolor = 'b', markeredgecolor = 'b', label = r'Raw Data - $S_{21}$')[0])
+		lines.append(ax.plot(S21.real,S21.imag,markersize  = 3,color = 'b' ,marker = 'o',  linestyle = 'None',markerfacecolor = 'b', markeredgecolor = 'b', label = r'Raw Data - $S_{21}$')[0])
 
 
 		s21_stepwise  =  R_0 * np.exp(np.complex(0.,theta_0)) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
 		#s21_stepwise  = norm * np.exp(np.complex(0.,np.angle(np.complex(a_0,b_0)))) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
-		lines.append(ax.plot(s21_stepwise.real,s21_stepwise.imag,markersize  = 4, color = 'r', linestyle = 'None',marker = 'o', markerfacecolor = 'r', markeredgecolor = 'r', label = r'Stepwise Fit - $\hat{S}_{21}$')[0])
+		lines.append(ax.plot(s21_stepwise.real,s21_stepwise.imag,markersize  = 3, color = 'r', linestyle = 'None',marker = 'o', markerfacecolor = 'r', markeredgecolor = 'r', label = r'Stepwise Fit - $\hat{S}_{21}$')[0])
 		ax_dict.update({ax:lines})
 
 
@@ -3286,8 +3308,11 @@ class sweep:
 
 			fig.savefig(name, dpi=300, transparency  = True, bbox_inches='tight')#Title.replace('\n','_').replace(' ','_')+date
 			if Make_PGF:
+				#cur_backend = mpl.get_backend()
+				#plt.switch_backend('pgf')
 				name = name + '.pgf'
-				plt.savefig(name, bbox_inches = 'tight')
+				plt.savefig(name, bbox_inches = 'tight', transparancy = True) #
+				#plt.switch_backend(cur_backend)
 			os.chdir(Working_Dir)
 
 
