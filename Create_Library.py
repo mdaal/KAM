@@ -1,6 +1,7 @@
 # run this code from terminal useing 'run -i Create_Library'
 import time
 import KAM
+import numpy as np
 reload(KAM)
 
 start = time.time()
@@ -12,6 +13,7 @@ path = '/Users/miguel_daal/Desktop/Some_Data/'
 
 Find_Temperatures = 0
 Cable_Calibration = 1
+Run53ab = 1
 Run52b = 0
 Run51a = 0
 Run51b = 0
@@ -25,7 +27,7 @@ Run45a = 0
 Run44b = 0
 Run44a = 0
 Save_Sonnet_Sims = 0
-Mock_Data = 1
+Mock_Data = 0
 
 #############
 #
@@ -201,6 +203,37 @@ if Cable_Calibration:
 													swp.metadata.Cable_Calibration['One_Way_40mK'][1]  - swp.metadata.Cable_Calibration['One_Way_4K'][1],
 													swp.metadata.Cable_Calibration['One_Way_40mK'][2]  - swp.metadata.Cable_Calibration['One_Way_4K'][2],
 													'One_Way_40mK - One_Way_4K', 400995077.27409261, 998491719.05006254)
+
+if Run53ab: #256 um resonator (S8) in mu-metal sheild
+	if 1: #Survey Sweep  - Low Freq
+		filename = path + 'Run53ab/Run_53ab_Data.h5'
+		table_path = '/SweepP/T201603112022_SweepP'
+		swp.load_hf5_2(filename, table_path)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
+		swp.pick_loop(0)
+		Electrical_Delay = swp.remove_cable_delay( Show_Plot = False, Verbose = True, center_freq = None,Force_Recalculate = True); 
+		swp.fill_sweep_array(Fit_Resonances = False, Compute_Preadout = False, Add_Temperatures = True) #Dont Compute Preadout for Surverys. That would be meaningless.
+		swp.save_hf5(overwrite = True)	
+	if 0: 	#P Sweep 
+		filename = path + 'Run53ab/Run_53ab_Data.h5'
+		table_path = '/SweepNP/T201603130517_SweepNP'
+		swp.load_hf5_2(filename, table_path)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
+		swp.metadata.Electrical_Delay = Electrical_Delay
+		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
+		swp.save_hf5(overwrite = True)
+		Power_Calibration  = swp.metadata.Power_Calibration # forgot to  include in TP sweep below
+	if 1:	#TP Sweep 
+		filename = path + 'Run53ab/Run_53ab_Data.h5'
+		table_path = '/SweepNPT/T201603120024_SweepNPT'
+		swp.load_hf5_2(filename, table_path)
+		_set_metadata(Z1_dict_1,Z3_dict_1,Eeff_dict_1,gp_thickness_dict_1,System_Calibration)
+		swp.metadata.Electrical_Delay = Electrical_Delay
+		swp.metadata.Power_Calibration = Power_Calibration 
+		swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = True, Add_Temperatures = True)
+		swp.save_hf5(overwrite = True)
+
+
 
 if Run52b: #256 um resonator (S8) on hex ground plane
 	if 1:	#Survey Sweep  - Low Freq
@@ -767,12 +800,45 @@ if Save_Sonnet_Sims:
 	swp.metadata.Run = 'S3_Sim'
 	swp.save_hf5(overwrite = True)
 
+	filename = path + 'Resonator_Simulations/S3_no_teflon.s2p' #This simulation replaces the teflon in the dielectric with sapphire.
+	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False)
+	swp.metadata.Resonator_Width = 2.**3 * 1e-6
+	swp.metadata.Run = 'S3_sapphire_Sim'
+	swp.save_hf5(overwrite = True)
+
+	filename = path + 'Resonator_Simulations/S3_no_teflon_v16.s2p' #This simulation replaces the teflon in the dielectric with sapphire.
+	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False)
+	swp.metadata.Resonator_Width = 2.**3 * 1e-6
+	swp.metadata.Run = 'S3_sapphire_v16_Sim'
+	swp.save_hf5(overwrite = True)
+
+	filename = path + 'Resonator_Simulations/S4_no_teflon.s2p' #This simulation replaces the teflon in the dielectric with sapphire.
+	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False)
+	swp.metadata.Resonator_Width = 2.**4 * 1e-6
+	swp.metadata.Run = 'S4_sapphire_Sim'
+	swp.save_hf5(overwrite = True)
+
 	filename = path + 'Resonator_Simulations/S4.s2p'
 	swp.load_touchstone(filename)
 	swp.metadata.Electrical_Delay = 0
 	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False) 
 	swp.metadata.Resonator_Width = 2.**4 * 1e-6
 	swp.metadata.Run = 'S4_Sim'
+	swp.save_hf5(overwrite = True)
+
+
+	filename = path + 'Resonator_Simulations/S5_no_teflon.s2p' #This simulation replaces the teflon in the dielectric with sapphire.
+	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False)
+	swp.metadata.Resonator_Width = 2.**5 * 1e-6
+	swp.metadata.Run = 'S5_sapphire_Sim'
 	swp.save_hf5(overwrite = True)
 
 	filename = path + 'Resonator_Simulations/S5.s2p'
@@ -797,6 +863,14 @@ if Save_Sonnet_Sims:
 	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False) 
 	swp.metadata.Resonator_Width = 2.**7 * 1e-6
 	swp.metadata.Run = 'S7_Sim'
+	swp.save_hf5(overwrite = True)
+
+	filename = path + 'Resonator_Simulations/S5_no_teflon.s2p' #This simulation replaces the teflon in the dielectric with sapphire.
+	swp.load_touchstone(filename)
+	swp.metadata.Electrical_Delay = 0
+	swp.fill_sweep_array(Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = False)
+	swp.metadata.Resonator_Width = 2.**8 * 1e-6
+	swp.metadata.Run = 'S5_sapphire_Sim'
 	swp.save_hf5(overwrite = True)
 
 	filename = path + 'Resonator_Simulations/S8.s2p'

@@ -510,14 +510,14 @@ class sweep:
 			obj = itemloop(obj)
 		return obj
 
-	def _define_sweep_data_columns(self, fsteps, tpoints):
+	def _define_sweep_data_columns(self, fsteps, tpoints, list_only = False):
 		self.metadata.Fsteps = fsteps
 		self.metadata.Num_Temperatures  = tpoints
 
 		if tpoints < 1: # we dont want a shape = (0,) array. We want at least (1,)
 			tpoints = 1
 
-		self.sweep_data_columns = np.dtype([
+		self.sweep_data_columns_list = [
 			("Fstart"         			, np.float64), # in Hz
 			("Fstop"          			, np.float64), # in Hz
 			("Heater_Voltage" 			, np.float64), # in Volts
@@ -559,8 +559,9 @@ class sweep:
 			("sR"						, np.float64),
 
 			#("S21_Processed"            , np.complex128, (fsteps,)), # Processed S21 used in phase fit 
-			])
-
+			]
+		if list_only == False:
+			self.sweep_data_columns = np.dtype(self.sweep_data_columns_list)
 
 	def _define_sweep_array(self,index,**field_names):
 		#for field_name in self.sweep_data_columns.fields.keys():
@@ -854,6 +855,13 @@ class sweep:
 		db_title = 'Aggregation of Selected Data Sets'
 		group_name = 'Run' + self.metadata.Run
 		group_title = self.metadata.Test_Location
+
+
+		try:  # for forward compatabiliity with 75uW python DAQ
+			d = datetime.datetime.strptime(self.metadata.Measurement_Start_Time , '%Y%m%d%H%M')
+		except:
+			pass
+
 		try:
 			# case for scan data date
 			d = datetime.datetime.strptime(self.metadata.Time_Created, '%B %d, %Y  %I:%M:%S.%f %p') # slightly wrong %f is microseconds. whereas we want milliseconds.
@@ -945,8 +953,8 @@ class sweep:
 		#ChooseCompression calobration data from Power Sweep Data. 
 		#It is the S21(Compression_Calibration_Index) for every sweep power 
 		compression_calibration_data = np.power(np.abs(Sweep_Array['S21'][:,Compression_Calibration_Index]),2) #Pout/Pin,  
-
-		Pout = compression_calibration_data*Pin
+		# alternatively : np.average(Sweep_Array['S21'][:,Compression_Calibration_Index:Compression_Calibration_Index+n],axis = 1) #average over  n freq points.
+		Pout = compression_calibration_data*Pin 
 
 		### TO BE DELETED
 		#calculated_power_gain is power gain calculated from the slope of the two smallest input powers in Pin
@@ -965,11 +973,11 @@ class sweep:
 		#Pout_ideal is the output power assuming linear gain
 		Pout_ideal = lambda p_in: calculated_power_gain*(p_in-Pin[0]) + Pout[0]
 
-		Probe_Power_Mag = np.power(10,self.Sweep_Array[Sweep_Array_Record_Index]['Pinput_dB']/10)
+		Probe_Power_Mag = np.power(10,self.Sweep_Array[Sweep_Array_Record_Index]['Pinput_dB']/10) #-- Substitute for input power
 		S21 = self.Sweep_Array[Sweep_Array_Record_Index]['S21']
 		S21_Pout = np.power(np.abs(S21),2)*Probe_Power_Mag
 
-		# create funcation to what Pin would be at an arbitrary Pout
+		# create interpolation funcation to what Pin would be at an arbitrary Pout
 		decompression_function = interp1d(Pout,Pin,kind = 'linear')
 
 		# for polynomial to Pout vs Pin curve and use this to extrapolate values where Pout in not in interpolation domain
@@ -1089,6 +1097,54 @@ class sweep:
 
 		self.TOC = TOC
 		print(TOC)
+
+	
+	def load_hf5_2(self, database_filename, tablepath):
+		''' This function is for loading data taken with KIDs_DAQ_75uW. It use the columns defined in that hf5 file to 
+		define the columns  in  self.sweep_data_columns 
+		table path is path to the database to be loaded starting from root. e.g. self.load_hf5('/Run44b/T201312102229')
+		database_filename is the name of the hf5 database to be accessed for the  table informaiton'''
+		
+		if not os.path.isfile(database_filename):
+			logging.error('Speficied h5 database does not exist. Aborting...')
+			return 
+		
+		wmode = 'a'
+
+		#delete previous metadata object
+		del(self.metadata)
+		self.metadata = metadata()
+		del(self.loop)
+		self.loop = loop()
+
+		# use "with" context manage to ensure file is always closed. no need for fileh.close()
+		with tables.open_file(database_filename, mode = wmode) as fileh:
+			table = fileh.get_node(tablepath)	
+			self.Sweep_Array = table.read()
+			for key in table.attrs.keys:
+				#exec('self.measurement_metadata["{0}"] = table.attrs.{0}'.format(key))
+				exec('self.metadata.{0} = table.attrs.{0}'.format(key))
+
+		#self.sweep_data_columns = self.Sweep_Array.dtype
+		imported_sweep_data_columns = self.Sweep_Array.dtype
+		try:
+			self.metadata.Cable_Calibration = self._Cable_Calibration
+			print('Cable Calibraiton data found and saved in Sweep_Array metadata.')
+		except:
+			pass
+
+		fsteps = imported_sweep_data_columns['Frequencies'].shape[0]
+		tpoints =  imported_sweep_data_columns['Temperature_Readings'].shape[0]
+		self._define_sweep_data_columns(fsteps, tpoints)
+		#self.sweep_data_columns_list
+
+		for name in imported_sweep_data_columns.names:
+
+			if name not in self.sweep_data_columns.names:
+				self.sweep_data_columns_list.append((name,imported_sweep_data_columns[name] ))
+		self.sweep_data_columns = np.dtype(self.sweep_data_columns_list)
+		self.Sweep_Array = np.array(self.Sweep_Array, dtype = self.sweep_data_columns)
+
 
 	def load_hf5(self, tablepath, filename = database_location):
 		''' table path is path to the database to be loaded starting from root. e.g. self.load_hf5('/Run44b/T201312102229')
@@ -2145,7 +2201,7 @@ class sweep:
 			# 	ax[k].tick_params(axis='x', labelsize=5)
 			# plt.show()
 
-	def fill_sweep_array(self, Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = True ):
+	def fill_sweep_array(self, Fit_Resonances = True, Compute_Preadout = False, Add_Temperatures = False, Complete_Fit = True , Remove_Gain_Compression = True, Verbose = True):
 		
 
 		if Compute_Preadout == True:
@@ -2153,7 +2209,8 @@ class sweep:
 
 			for quantities  in needed:				
 				if  self.metadata.__dict__[quantities] == None:
-					print('{0} metadate missing. Unable to compute Preadout. Setting to 0.'.format(quantities))
+					if Verbose == True:
+						print('{0} metadate missing. Unable to compute Preadout. Setting to 0.'.format(quantities))
 					Compute_Preadout = False
 
 				Atten_NA_Output = self.metadata.Atten_NA_Output
@@ -2162,7 +2219,8 @@ class sweep:
 				k = self.metadata.Cable_Calibration[Cable_Calibration_Key]
 
 			if Fit_Resonances == False:
-				print('Resonance fit not selected. Computation of Preadout_dB requires knowledge of resonance frequency and may not work.')
+				if Verbose == True:
+					print('Resonance fit not selected. Computation of Preadout_dB requires knowledge of resonance frequency and may not work.')
 
 
 			if Compute_Preadout == True:
@@ -2188,7 +2246,8 @@ class sweep:
 					tol =  0.0005 
 				
 				else:
-					print('Temperature_Calibration metadata is not found or not of the correct type. Unable to add temperatures.')
+					if Verbose == True:
+						print('Temperature_Calibration metadata is not found or not of the correct type. Unable to add temperatures.')
 					Add_Temperatures = False
 			else:
 				tol = None
@@ -2198,15 +2257,20 @@ class sweep:
 			
 		num_records = self.Sweep_Array.size
 		for index in xrange(num_records): 
-			sys.stdout.write('\r {0} of {1} '.format(index+1, num_records))
-			sys.stdout.flush()
+			if Verbose == True:
+				sys.stdout.write('\r {0} of {1} '.format(index+1, num_records))
+				sys.stdout.flush()
 
 			#set current loop
 			self.pick_loop(index)
 
 			if Fit_Resonances == True:
-				# Remove Gain Compression
-				self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
+				if Remove_Gain_Compression:
+					# Remove Gain Compression
+					self.decompress_gain(Compression_Calibration_Index = -1, Show_Plot = False, Verbose = False)
+
+				if self.loop.z.size > 5000:
+					self.trim_loop(N = 10, Verbose = False)
 
 				# Normalize Loop
 				#self.normalize_loop() 
@@ -2268,10 +2332,12 @@ class sweep:
 				if self.loop.fr != None:
 					self._define_sweep_array(index, Preadout_dB = self.Sweep_Array['Pinput_dB'][index] + Preadout(self.loop.fr))
 				elif np.abs(self.loop.freq[-1]-self.loop.freq[0]) > 1e9:
-					print('Sweep bandwidth is {0} Hz. Sweep looks more like a survey. Preadout_dB is meaningless for a survey. Aborting Preadout computation... '.format(np.abs(self.loop.freq[-1]-self.loop.freq[0])))
+					if Verbose == True:
+						print('Sweep bandwidth is {0} Hz. Sweep looks more like a survey. Preadout_dB is meaningless for a survey. Aborting Preadout computation... '.format(np.abs(self.loop.freq[-1]-self.loop.freq[0])))
 					
 				else:
-					print('No resonance frquency (fr) on record for selected resonance. Estimating fr using sweep minimum.')
+					if Verbose == True:
+						print('No resonance frquency (fr) on record for selected resonance. Estimating fr using sweep minimum.')
 					fr = np.extract(np.abs(self.loop.z).min() == np.abs(self.loop.z),self.loop.freq)[0]
 					self._define_sweep_array(index, Preadout_dB = self.Sweep_Array['Pinput_dB'][index] + fr)
 
@@ -2282,16 +2348,18 @@ class sweep:
 
 						self.Sweep_Array['Temperature'][index] = Temperature_Calibration[condition,1][0] # <-- Needs to be updated so that duplicate voltages are handled correctly
 					else:
-						print('Unable to match unique temperature to heater voltage value for Sweep_Array[{0}]. {1} matches found.'.format(index,condition.sum() ))
+						if Verbose == True:
+							print('Unable to match unique temperature to heater voltage value for Sweep_Array[{0}]. {1} matches found.'.format(index,condition.sum() ))
 				else:
 					self._define_sweep_array(index, Temperature = 	self.Sweep_Array['Temperature_Readings'][index].mean()) 		
 			# Clear out loop
 			del(self.loop)
 			self.loop = loop()
-		print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
+		if Verbose == True:
+			print('\nSweep Array filled.')# Options selected Fit_Resonances = {0}, Compute_Preadout = {1}, Add_Temperatures = {2}'.format( Fit_Resonances,Compute_Preadout,Add_Temperatures))
 
 
-	def _construct_readout_chain(self, F):
+	def _construct_readout_chain(self, F, Include_NA = True, Include_4K_to_40mK = False):
 		'''
 		F is a frequency array.
 		Constructs gain, Tn_m (T noise magnitude), and Tn_p (phase)  lists.
@@ -2309,6 +2377,10 @@ class sweep:
 
 		# Chain is the string of readout cables and amplifiers/devices
 		chain  = []
+		
+		if Include_4K_to_40mK:
+			chain.append('4K_to_40mK')
+
 		if self.metadata.LNA['LNA'] is not None:
 			chain.append(self.metadata.LNA['LNA'])
 
@@ -2317,15 +2389,17 @@ class sweep:
 		if self.metadata.RTAmp_In_Use:
 			chain.append(self.metadata.RTAmp) 
 
+		
 		chain.append('One_Way_300K')
 
 		if (self.metadata.Atten_NA_Input is not None) and (self.metadata.Atten_NA_Input>0):
 			chain.append('Atten_NA_Input')
 
+		if Include_NA:
+			chain.append('NA')
 
-		chain.append('NA')
 
-		passive_device_temp = {'300K_to_4K' : (290.+4.)/2, 'One_Way_300K': 290., 'Atten_NA_Input':290.}
+		passive_device_temp = {'4K_to_40mK': (4. +.04)/2, '300K_to_4K' : (290.+4.)/2, 'One_Way_300K': 290., 'Atten_NA_Input':290.}
 		Tn_p_s = []
 		Tn_m_s = []
 		g_s = []
@@ -2558,40 +2632,42 @@ class sweep:
 		fit['sigma_squared'] = sigma_squared
 
 
-		
-		ax_dict = {}
-		fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
-		fig_dict = {fig : ax_dict}
-		ax = fig.add_subplot(111,aspect='equal')
-		lines = []
-		s21_concurrent_c = cR * np.exp(np.complex(0.,ctheta)) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
-		# s21_concurrent_c = norm * np.exp(np.complex(0.,np.angle(np.complex(ca,cb)))) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
-		lines.append(ax.plot(s21_concurrent_c.real,s21_concurrent_c.imag, markersize  = 3, linestyle = 'None',color = 'g', marker = 'o', markerfacecolor = 'g', markeredgecolor = 'g',  label = r'Concurrent Fit -  $\sigma_{V\theta}$')[0])
+		if  Show_Plot:
+			ax_dict = {}
+			fig = plt.figure( figsize=(6.5, 6.5), dpi=100)
+			fig_dict = {fig : ax_dict}
+			ax = fig.add_subplot(111,aspect='equal')
+			lines = []
+			s21_concurrent_c = cR * np.exp(np.complex(0.,ctheta)) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
+			# s21_concurrent_c = norm * np.exp(np.complex(0.,np.angle(np.complex(ca,cb)))) * np.exp(np.complex(0,-2*np.pi*ctau)*F) * (1 - (cQ/cQc)*np.exp(np.complex(0,cphi)) / ( 1 + np.complex(1, 2*cQ)*(F-cfr)/cfr  ))
+			lines.append(ax.plot(s21_concurrent_c.real,s21_concurrent_c.imag, markersize  = 3, linestyle = 'None',color = 'g', marker = 'o', markerfacecolor = 'g', markeredgecolor = 'g',  label = r'Concurrent Fit -  $\sigma_{V\theta}$')[0])
 
-		s21_concurrent_s = sR * np.exp(np.complex(0.,stheta)) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
-		#s21_concurrent_s = norm * np.exp(np.complex(0.,np.angle(np.complex(sa,sb)))) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
-		lines.append(ax.plot(s21_concurrent_s.real,s21_concurrent_s.imag,markersize  = 3, color = 'm',linestyle = 'None', marker = 'o', markerfacecolor = 'm', markeredgecolor = 'm',  label = r'Concurrent Fit -  $\sigma_{G}$')[0])
-		lines.append(ax.plot(s21_concurrent_s[0:Sample_Size:].real,s21_concurrent_s[0:Sample_Size:].imag,'m+', label = r'_Concurrent Fit -  $\sigma_{G}$')[0])
+			s21_concurrent_s = sR * np.exp(np.complex(0.,stheta)) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
+			#s21_concurrent_s = norm * np.exp(np.complex(0.,np.angle(np.complex(sa,sb)))) * np.exp(np.complex(0,-2*np.pi*stau)*F) * (1 - (sQ/sQc)*np.exp(np.complex(0,sphi)) / ( 1 + np.complex(1, 2*sQ)*(F-sfr)/sfr  ))
+			lines.append(ax.plot(s21_concurrent_s.real,s21_concurrent_s.imag,markersize  = 3, color = 'm',linestyle = 'None', marker = 'o', markerfacecolor = 'm', markeredgecolor = 'm',  label = r'Concurrent Fit -  $\sigma_{G}$')[0])
+			lines.append(ax.plot(s21_concurrent_s[0:Sample_Size:].real,s21_concurrent_s[0:Sample_Size:].imag,'m+', label = r'_Concurrent Fit -  $\sigma_{G}$')[0])
 
-		lines.append(ax.plot(S21.real,S21.imag,markersize  = 3,color = 'b' ,marker = 'o',  linestyle = 'None',markerfacecolor = 'b', markeredgecolor = 'b', label = r'Raw Data - $S_{21}$')[0])
-
-
-		s21_stepwise  =  R_0 * np.exp(np.complex(0.,theta_0)) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
-		#s21_stepwise  = norm * np.exp(np.complex(0.,np.angle(np.complex(a_0,b_0)))) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
-		lines.append(ax.plot(s21_stepwise.real,s21_stepwise.imag,markersize  = 3, color = 'r', linestyle = 'None',marker = 'o', markerfacecolor = 'r', markeredgecolor = 'r', label = r'Stepwise Fit - $\hat{S}_{21}$')[0])
-		ax_dict.update({ax:lines})
+			lines.append(ax.plot(S21.real,S21.imag,markersize  = 3,color = 'b' ,marker = 'o',  linestyle = 'None',markerfacecolor = 'b', markeredgecolor = 'b', label = r'Raw Data - $S_{21}$')[0])
 
 
-		ax.set_xlabel(r'$\Re[S_{21}(f)]$')
-		ax.set_ylabel(r'$\Im[S_{21}(f)]$')
-		ax.yaxis.labelpad = -2
-		ax.legend(loc = 'upper center', fontsize=5, bbox_to_anchor=(0.5, -0.1), ncol=2,scatterpoints =1, numpoints = 1, labelspacing = .02)
-		#ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
+			s21_stepwise  =  R_0 * np.exp(np.complex(0.,theta_0)) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
+			#s21_stepwise  = norm * np.exp(np.complex(0.,np.angle(np.complex(a_0,b_0)))) * np.exp(np.complex(0,-2*np.pi*tau_0)*F) * (1 - (Q_0/Qc_0)*np.exp(np.complex(0,phi_0)) /( 1 + np.complex(1, 2*Q_0)*(F-fr_0)/fr_0  ))
+			lines.append(ax.plot(s21_stepwise.real,s21_stepwise.imag,markersize  = 3, color = 'r', linestyle = 'None',marker = 'o', markerfacecolor = 'r', markeredgecolor = 'r', label = r'Stepwise Fit - $\hat{S}_{21}$')[0])
+			ax_dict.update({ax:lines})
 
-		plot_dict = fig_dict	
 
-		if  Show_Plot:	
-			plt.show()
+			ax.set_xlabel(r'$\Re[S_{21}(f)]$')
+			ax.set_ylabel(r'$\Im[S_{21}(f)]$')
+			ax.yaxis.labelpad = -2
+			ax.legend(loc = 'upper center', fontsize=5, bbox_to_anchor=(0.5, -0.1), ncol=2,scatterpoints =1, numpoints = 1, labelspacing = .02)
+			#ax.legend(loc = 'best', fontsize=9,scatterpoints =1, numpoints = 1, labelspacing = .02) 
+
+			plot_dict = fig_dict
+			plt.show()	
+		else:
+			plot_dict =  None
+		# if  Show_Plot:	
+		# 	plt.show()
 
 		if Save_Fig == True:
 			self._save_fig_dec(fig,'Concurrent_Fit_Index_{0}'.format(self.loop.index))
@@ -2858,7 +2934,7 @@ class sweep:
 			'''
 			parameter_dict = {'f_0':p[0], 'Qtl':p[1], 'Qc':p[2], 'phi31':p[3], 'eta':p[4], 'delta':p[5], 'Zfl':Zfl, 'Zres':Zres,  'phiV1':phiV1, 'V30V30':V30V30} 
 			fd = self._nonlinear_formulae( parameter_dict, model = 2) # get the nonlinear formulae dict, fd 
-			a,b,phi,tau = p[6:]
+			a,b,phi,tau = p[6:] # geometrical transformation parameters and tau - cable delay
 			
 			sumsq = 0
 			N = 0 # total number of points in fit
