@@ -780,7 +780,9 @@ class sweep:
 						# and we write it to tmp on a single line.
 						# for .s2p files the S matrix is fully defined on one line of f
 						# for .s3p files, the S matrix is defined in three lines. second two are indented.
-						if not ((next_line[0] == '') | (next_line[0] == ' ')):
+						
+						# if not ((next_line[0] == '') | (next_line[0] == ' ')): # Changing this line to be consistent with line below...
+						if not ((next_line == '') or (next_line[0] == ' ')): 
 							tmp.write(prev_line)
 							tmp.write('\n')
 							prev_line = ''
@@ -793,7 +795,8 @@ class sweep:
 						tmp.write(line)
 						next_line = f.readline()
 						# add \n to line if it does not begin a S matrix definition block
-						if not ((next_line[0] == '') | (next_line[0] == ' ')):
+						# if not ((next_line[0] == '') | (next_line[0] == ' ')): # Changed on 7/11/17 bc Nick was have problems reading in .s2p files
+						if not ((next_line == '') or (next_line[0] == ' ')):
 							tmp.write('\n')
 						f.seek(pos,0)
 
